@@ -1,42 +1,330 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+/* make sizing predictable so padding/borders don't cause overflow */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #2d2d2d 100%);
+}
+
+/* Left Panel - Trustworthiness Display */
+.left-panel {
+  /* Let the left panel grow as the viewport widens */
+  flex: 1 1 auto;
+  min-width: 380px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.trustworthiness-display {
   text-align: center;
+  padding: 2rem;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.station-name {
+  font-size: 3rem;
+  font-weight: 300;
+  margin-bottom: 2rem;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+.percentage-circle {
+  width: 350px;
+  height: 350px;
+  border: 10px solid rgba(34, 197, 94, 0.8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 2rem;
+  background: rgba(34, 197, 94, 0.1);
+  backdrop-filter: blur(15px);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
+}
+
+.percentage-number {
+  font-size: 6rem;
+  font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.trustworthiness-label {
+  font-size: 1.8rem;
+  font-weight: 300;
+  margin: 0;
+  opacity: 0.9;
+}
+
+/* Right Panel - Map and Logs */
+.right-panel {
+  /* Keep right panel compact; cap its max width so left grows instead */
+  flex: 0 0 clamp(360px, 35vw, 520px);
+  max-width: clamp(360px, 35vw, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  justify-content: space-between;
+}
+
+/* Map Container */
+.map-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 20px;
+  padding: 2rem;
+  margin: 1rem;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.map-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+}
+
+.map-container:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 
+    0 16px 48px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.map-container h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: white;
+  font-weight: 600;
+  font-size: 1.5rem;
+}
+
+.google-map-container {
+  width: 100%;
+  flex: 1 1 auto; /* allow the map frame to grow/shrink inside the flex column */
+  min-height: 0;   /* critical: lets the child shrink and prevents overflow */
+  height: auto;
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
+}
+
+.google-map-container:hover {
+  transform: translateY(-4px);
+}
+
+.google-maps-embed {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 20px;
+  display: block;
+}
+
+.map-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.station-markers {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.station-marker {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #ff6b6b;
+  border: 3px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: all;
+  transition: all 0.3s ease;
+  z-index: 20;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.station-marker:hover {
+  transform: scale(1.4);
+  background: #ff5252;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
   }
-  to {
-    transform: rotate(360deg);
+  100% {
+    transform: translate(-50%, -50%) scale(2.5);
+    opacity: 0;
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.marker-label {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.9);
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  font-weight: 500;
 }
 
-.card {
-  padding: 2em;
+.station-marker:hover .marker-label {
+  opacity: 1;
 }
 
-.read-the-docs {
-  color: #888;
+/* Approximate positions for Boston MBTA stations */
+.north-station {
+  top: 35%;
+  left: 48%;
+}
+
+.south-station {
+  top: 60%;
+  left: 52%;
+}
+
+.back-bay {
+  top: 55%;
+  left: 40%;
+}
+
+.downtown-crossing {
+  top: 50%;
+  left: 50%;
+}
+
+/* Log Container */
+.log-container {
+  flex: 1;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 20px;
+  padding: 2rem;
+  margin: 1rem;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.log-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+}
+
+.log-container:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 
+    0 16px 48px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.log-container h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: white;
+  font-weight: 600;
+  font-size: 1.3rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.log-content {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.9);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: 300px;
+  font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.log-entry {
+  background: transparent;
+  border-radius: 0;
+  padding: 0.4rem 0;
+  margin-bottom: 0.2rem;
+  line-height: 1.6;
+  word-wrap: break-word;
+  font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+}
+
+.log-timestamp {
+  color: #cccccc;
+  font-weight: normal;
+  font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+}
+
+.log-message {
+  color: #ffffff;
+  margin-left: 0.5rem;
+  font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+}
+
+.log-details {
+  color: #e0e0e0;
+  font-style: normal;
+  font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+}
+
+/* Scrollbar styling for log content */
+.log-content::-webkit-scrollbar {
+  display: none;
+}
+
+.log-content {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
