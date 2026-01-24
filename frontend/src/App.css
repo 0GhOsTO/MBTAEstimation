@@ -214,25 +214,14 @@
   opacity: 1;
 }
 
-/* Approximate positions for Boston MBTA stations */
-.north-station {
-  top: 35%;
-  left: 48%;
+/* Green Line B stations */
+.green-b-station {
+  background: #00843D;
+  border: 3px solid white;
 }
 
-.south-station {
-  top: 60%;
-  left: 52%;
-}
-
-.back-bay {
-  top: 55%;
-  left: 40%;
-}
-
-.downtown-crossing {
-  top: 50%;
-  left: 50%;
+.green-b-station:hover {
+  background: #00a94d;
 }
 
 /* Log Container */

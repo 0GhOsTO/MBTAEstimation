@@ -9,9 +9,52 @@ interface LogEntry {
   elementClass?: string;
 }
 
+// Green Line B stations with actual GPS coordinates
+const greenLineBStations = [
+  { name: "Boston College", lat: 42.3396, lng: -71.1686 },
+  { name: "South Street", lat: 42.3399, lng: -71.1571 },
+  { name: "Chestnut Hill Ave", lat: 42.3387, lng: -71.1527 },
+  { name: "Chiswick Road", lat: 42.3406, lng: -71.1504 },
+  { name: "Sutherland Road", lat: 42.3410, lng: -71.1464 },
+  { name: "Griggs Street", lat: 42.3481, lng: -71.1345 },
+  { name: "Allston Street", lat: 42.3484, lng: -71.1373 },
+  { name: "Warren Street", lat: 42.3485, lng: -71.1401 },
+  { name: "Washington Street", lat: 42.3431, lng: -71.1420 },
+  { name: "Babcock Street", lat: 42.3513, lng: -71.1218 },
+  { name: "Pleasant Street", lat: 42.3513, lng: -71.1187 },
+  { name: "Saint Paul Street", lat: 42.3511, lng: -71.1157 },
+  { name: "BU West", lat: 42.3499, lng: -71.1138 },
+  { name: "BU Central", lat: 42.3497, lng: -71.1070 },
+  { name: "Blandford Street", lat: 42.3493, lng: -71.1002 },
+  { name: "Kenmore", lat: 42.3488, lng: -71.0952 },
+  { name: "Hynes Convention Center", lat: 42.3472, lng: -71.0876 },
+  { name: "Copley", lat: 42.3499, lng: -71.0778 },
+  { name: "Arlington", lat: 42.3524, lng: -71.0704 },
+  { name: "Boylston", lat: 42.3530, lng: -71.0646 },
+  { name: "Park Street", lat: 42.3563, lng: -71.0622 },
+];
+
+// Map bounds for Boston area (approximate based on the embedded map)
+const mapBounds = {
+  north: 42.400,
+  south: 42.320,
+  west: -71.180,
+  east: -71.040
+};
+
+// Convert lat/lng to percentage position on the map
+const getMapPosition = (lat: number, lng: number) => {
+  const leftPercent = ((lng - mapBounds.west) / (mapBounds.east - mapBounds.west)) * 100;
+  const topPercent = ((mapBounds.north - lat) / (mapBounds.north - mapBounds.south)) * 100;
+  return {
+    left: `${leftPercent.toFixed(1)}%`,
+    top: `${topPercent.toFixed(1)}%`
+  };
+};
+
 function App() {
   const [trustworthiness, setTrustworthiness] = useState(85)
-  const [selectedStation, setSelectedStation] = useState("North Station")
+  const [selectedStation, setSelectedStation] = useState("Park Street")
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 1,
@@ -60,7 +103,7 @@ function App() {
       
       <div className="right-panel">
         <div className="map-container">
-          <h2>MBTA Station Map</h2>
+          <h2>Green Line B</h2>
           <div 
             className="google-map-container" 
             id="station-map"
@@ -77,50 +120,27 @@ function App() {
             ></iframe>
             <div className="map-overlay" onClick={handleMapClick}>
               <div className="station-markers">
-                <div 
-                  className="station-marker north-station" 
-                  id="north-station-marker"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStationSelect("North Station");
-                  }}
-                  title="North Station"
-                >
-                  <span className="marker-label">North Station</span>
-                </div>
-                <div 
-                  className="station-marker south-station" 
-                  id="south-station-marker"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStationSelect("South Station");
-                  }}
-                  title="South Station"
-                >
-                  <span className="marker-label">South Station</span>
-                </div>
-                <div 
-                  className="station-marker back-bay" 
-                  id="back-bay-marker"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStationSelect("Back Bay");
-                  }}
-                  title="Back Bay"
-                >
-                  <span className="marker-label">Back Bay</span>
-                </div>
-                <div 
-                  className="station-marker downtown-crossing" 
-                  id="downtown-crossing-marker"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStationSelect("Downtown Crossing");
-                  }}
-                  title="Downtown Crossing"
-                >
-                  <span className="marker-label">Downtown Crossing</span>
-                </div>
+                {greenLineBStations.map((station, index) => {
+                  const position = getMapPosition(station.lat, station.lng);
+                  return (
+                    <div 
+                      key={station.name}
+                      className="station-marker green-b-station" 
+                      id={`station-${index}`}
+                      style={{
+                        left: position.left,
+                        top: position.top
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStationSelect(station.name);
+                      }}
+                      title={station.name}
+                    >
+                      <span className="marker-label">{station.name}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
