@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,13 +16,21 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func fetchPrediction(stopID string) {
+// grab the API key.
+var key string
 
-	// grab the API key.
-	key := os.Getenv("MBTA_API_KEY")
+func init() {
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("No .env found")
+	}
+	key = os.Getenv("MBTA_API_KEY")
 	if key == "" {
 		panic("MBTA_API_KEY not set")
 	}
+}
+
+func fetchPrediction(stopID string) {
 
 	// constructing the request.
 	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s", stopID)
@@ -46,16 +55,62 @@ func fetchPrediction(stopID string) {
 	fmt.Println(string(body))
 }
 
-func genTrainTable(trainID string) {
+// routes -> route ID -> vehicles
+func getTrainInRoute(routeName string) ([]string, error) {
+	// Grab the routes for the type 0.
+	// Grab the trains with the vehicles in the Green-B line.
+	url := fmt.Sprintf("https://api-v3.mbta.com/vehicles?filter[route]=%s", routeName)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+	if err != nil {
+		panic(err)
+	}
+	// Set the API key in the header.
+	req.Header.Set("x-api-key", key)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	// Close the response body when it is done.
+	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	// Test printing out the body if it correctly received.
+	fmt.Println(string(body) + "\n")
+
+	// Structure to unMarshall the response.
+	// var vehicleResp struct {} --> declare anonymous struct type.
+	// Data --> field name | []struct {} --> slice of anonymous struct type.
+	// `json:"id"` --> pure GO syntax to map the JSON key "id" to the field ID.
+	var vehicleResp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+
+	// How unMarshalling works.
+	// Get the raw data from the body.
+	// Unmarshall into the struct and save at the adress of vehicleResp.
+	if err := json.Unmarshal(body, &vehicleResp); err != nil {
+		return nil, err
+	}
+
+	// ID extraction from the response.
+	// Avoid pre-filling the slice with empty strings; start with length 0 and set capacity.
+	ids := make([]string, 0, len(vehicleResp.Data))
+	// for loop explanation:
+	// _ --> ignoring the index | v --> value at that index in the slice.
+	for _, v := range vehicleResp.Data {
+		ids = append(ids, v.ID)
+	}
+
+	return ids, nil
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("No .env found")
-	}
-
 	// B line stop IDs:
 	/* 70111 70113 70115 70117 70121 70125 70127 70129
 	70131 70135 70137 70139 70141 70143 70145 70147 70149 70196 71151
@@ -77,7 +132,16 @@ func main() {
 		// 2.
 		// go function call
 		// Uncertainty by station vs uncertainty by the train ID.
-		fetchPrediction("70135") // example stop ID
+
+		ids, err := getTrainInRoute("Green-B")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Train IDs: ", ids)
+		fmt.Println("Count: ", len(ids))
+
+		//=======TESTING==========
+		// fetchPrediction("70135") // example stop ID
 	}
 }
 
