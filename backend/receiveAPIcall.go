@@ -46,6 +46,10 @@ func fetchPrediction(stopID string) {
 	fmt.Println(string(body))
 }
 
+func genTrainTable(trainID string) {
+
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -67,9 +71,19 @@ func main() {
 	// call once right away
 	for {
 		<-ticker.C
-		fetchPrediction("70020") // example stop ID
+		// @TODO: NEED to handle in go routine
+		// NEED to handle if there is no data returned(happens sometimes due to bug in MBTA API)
+		// 1. Require to request the prediction
+		// 2.
+		// go function call
+		// Uncertainty by station vs uncertainty by the train ID.
+		fetchPrediction("70135") // example stop ID
 	}
 }
+
+// Summarizing the progress for readme
+// Had hard time to understand the API due to the error case when it returns blank or null
+// Hard time calculating the arrival time for the returned data structure
 
 //Mathematical equations
 //error = | predicted_arrival_time - actual_arrival_time |
