@@ -19,6 +19,53 @@ import (
 // grab the API key.
 var key string
 
+// Channel for the aggregator
+var obsCh = make(chan PredictionData)
+
+// PREDICTION Hashmap for saving which train arrives where at what time.
+var predictionMap = make(map[string]PredictionData)
+
+// Struct to hold prediction data
+// 1. observation time
+// 2. stop ID
+// 3. PREDICTED arrival time
+// 4. PREDICTED departure time
+// 5. current status
+type PredictionData struct {
+	ObservationTime time.Time
+	StopID          string
+	ArrivalTime     *time.Time // pointer because it can be null
+	DepartureTime   *time.Time // pointer because it can be null
+	Status          string
+	VehicleID       string
+}
+
+// Struct to unmarshal MBTA predictions API response
+type PredictionsResponse struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Attributes struct {
+			ArrivalTime   *string `json:"arrival_time"`   // ISO 8601 timestamp or null
+			DepartureTime *string `json:"departure_time"` // ISO 8601 timestamp or null
+			Status        *string `json:"status"`         // can be null
+		} `json:"attributes"`
+		Relationships struct {
+			Stop struct {
+				Data struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				} `json:"data"`
+			} `json:"stop"`
+			Vehicle struct {
+				Data struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				} `json:"data"`
+			} `json:"vehicle"`
+		} `json:"relationships"`
+	} `json:"data"`
+}
+
 func init() {
 	err := godotenv.Load()
 	if err != nil {
@@ -30,31 +77,117 @@ func init() {
 	}
 }
 
-func fetchPrediction(stopID string) {
-
+func fetchPrediction(stopID string) ([]PredictionData, error) {
 	// constructing the request.
 	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s", stopID)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	req.Header.Set("x-api-key", key)
 	client := &http.Client{}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	// Unmarshal JSON response
+	var predResp PredictionsResponse
+	if err := json.Unmarshal(body, &predResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal predictions: %w", err)
+	}
+
+	// Extract the fields you need
+	predictions := make([]PredictionData, 0, len(predResp.Data))
+	observationTime := time.Now() // Current time as observation time
+
+	for _, pred := range predResp.Data {
+		data := PredictionData{
+			ObservationTime: observationTime,
+			StopID:          pred.Relationships.Stop.Data.ID,
+			VehicleID:       pred.Relationships.Vehicle.Data.ID,
+		}
+
+		// Parse arrival time if present
+		if pred.Attributes.ArrivalTime != nil && *pred.Attributes.ArrivalTime != "" {
+			if arrivalTime, err := time.Parse(time.RFC3339, *pred.Attributes.ArrivalTime); err == nil {
+				data.ArrivalTime = &arrivalTime
+			}
+		}
+
+		// Parse departure time if present
+		if pred.Attributes.DepartureTime != nil && *pred.Attributes.DepartureTime != "" {
+			if departureTime, err := time.Parse(time.RFC3339, *pred.Attributes.DepartureTime); err == nil {
+				data.DepartureTime = &departureTime
+			}
+		}
+
+		// Set status if present
+		if pred.Attributes.Status != nil {
+			data.Status = *pred.Attributes.Status
+		}
+
+		predictions = append(predictions, data)
+	}
+
+	return predictions, nil
+}
+
+// This will aggregate the each extracted prediction data for the vehicle ID.
+func aggregateVehiclePrediction() {
+	// Grab the routes for the type 0.
+	// Grab the trains with the vehicles in the Green-B line.
+	predictions, err := fetchPrediction("70135") // example stop ID
 	if err != nil {
 		panic(err)
 	}
+	// Test printing out the body if it correctly received.
+	// ==========================================================
+	// Print the extracted data. (for testing)
+	for _, pred := range predictions {
+		fmt.Println("=== Prediction ===")
+		fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
+		fmt.Printf("Stop ID: %s\n", pred.StopID)
+		fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
+		if pred.ArrivalTime != nil {
+			fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+		} else {
+			fmt.Println("Predicted Arrival: N/A")
+		}
+		if pred.DepartureTime != nil {
+			fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
+		} else {
+			fmt.Println("Predicted Departure: N/A")
+		}
+		fmt.Printf("Status: %s\n", pred.Status)
+		fmt.Println()
+	}
+	// ==========================================================
+	// LATER THESE WILL HANDLE IN GO ROUTINE CONCURRENTLY.
+	// Chug in to the channel.
+	for _, pred := range predictions {
+		// Send it to the channel step by step.
+		obsCh <- pred
+	}
 
-	fmt.Println(string(body))
+	// Pull out from the channel and put in the hash map.
+	for obs := range obsCh {
+		fmt.Println("Received from channel: ", obs)
+		// Store in the hash map.
+		predictionMap[obs.VehicleID] = obs
+		//==================================================NEED TO START FROM HERE
+	}
+
 }
 
+// This grabs the vehicle IDs in the specific route.
 // routes -> route ID -> vehicles
 func getTrainInRoute(routeName string) ([]string, error) {
 	// Grab the routes for the type 0.
@@ -141,7 +274,30 @@ func main() {
 		fmt.Println("Count: ", len(ids))
 
 		//=======TESTING==========
-		// fetchPrediction("70135") // example stop ID
+		predictions, err := fetchPrediction("70135") // example stop ID
+		if err != nil {
+			panic(err)
+		}
+
+		// Print extracted data
+		for _, pred := range predictions {
+			fmt.Println("=== Prediction ===")
+			fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
+			fmt.Printf("Stop ID: %s\n", pred.StopID)
+			fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
+			if pred.ArrivalTime != nil {
+				fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+			} else {
+				fmt.Println("Predicted Arrival: N/A")
+			}
+			if pred.DepartureTime != nil {
+				fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
+			} else {
+				fmt.Println("Predicted Departure: N/A")
+			}
+			fmt.Printf("Status: %s\n", pred.Status)
+			fmt.Println()
+		}
 	}
 }
 
