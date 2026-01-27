@@ -23,7 +23,7 @@ var key string
 var obsCh = make(chan PredictionData)
 
 // PREDICTION Hashmap for saving which train arrives where at what time.
-var predictionMap = make(map[string]PredictionData)
+var trainInfo = make(map[string][]PredictionData)
 
 // Struct to hold prediction data
 // 1. observation time
@@ -181,8 +181,8 @@ func aggregateVehiclePrediction() {
 	for obs := range obsCh {
 		fmt.Println("Received from channel: ", obs)
 		// Store in the hash map.
-		predictionMap[obs.VehicleID] = obs
-		//==================================================NEED TO START FROM HERE
+		// vehicle ID : [] of prediction data. Append to the slice.
+		trainInfo[obs.VehicleID] = append(trainInfo[obs.VehicleID], obs)
 	}
 
 }
@@ -190,6 +190,7 @@ func aggregateVehiclePrediction() {
 // This grabs the vehicle IDs in the specific route.
 // routes -> route ID -> vehicles
 func getTrainInRoute(routeName string) ([]string, error) {
+
 	// Grab the routes for the type 0.
 	// Grab the trains with the vehicles in the Green-B line.
 	url := fmt.Sprintf("https://api-v3.mbta.com/vehicles?filter[route]=%s", routeName)
@@ -272,32 +273,40 @@ func main() {
 		}
 		fmt.Println("Train IDs: ", ids)
 		fmt.Println("Count: ", len(ids))
+		//======CONCURRENT==========
+		stopIDs := []int{70111, 70113, 70115, 70117, 70121, 70125, 70127, 70129, 70131, 70135, 70137, 70139, 70141, 70143, 70145, 70147, 70149, 70196, 71151}
+		for _, val := range stopIDs {
+			go func(idx int) {
+				fmt.Println("ID: ", idx, "\n")
+				// Grab all the predictions concurrently.
+				predictions, err := fetchPrediction("70135") // example stop ID
+				if err != nil {
+					panic(err)
+				}
 
-		//=======TESTING==========
-		predictions, err := fetchPrediction("70135") // example stop ID
-		if err != nil {
-			panic(err)
+				for _, pred := range predictions {
+					fmt.Println("=== Prediction ===")
+					fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
+					fmt.Printf("Stop ID: %s\n", pred.StopID)
+					fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
+					if pred.ArrivalTime != nil {
+						fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+					} else {
+						fmt.Println("Predicted Arrival: N/A")
+					}
+					if pred.DepartureTime != nil {
+						fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
+					} else {
+						fmt.Println("Predicted Departure: N/A")
+					}
+					fmt.Printf("Status: %s\n", pred.Status)
+					fmt.Println()
+				}
+			}(val)
 		}
+		//=======TESTING==========
 
 		// Print extracted data
-		for _, pred := range predictions {
-			fmt.Println("=== Prediction ===")
-			fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
-			fmt.Printf("Stop ID: %s\n", pred.StopID)
-			fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
-			if pred.ArrivalTime != nil {
-				fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-			} else {
-				fmt.Println("Predicted Arrival: N/A")
-			}
-			if pred.DepartureTime != nil {
-				fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
-			} else {
-				fmt.Println("Predicted Departure: N/A")
-			}
-			fmt.Printf("Status: %s\n", pred.Status)
-			fmt.Println()
-		}
 	}
 }
 
