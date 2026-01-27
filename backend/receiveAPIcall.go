@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -18,9 +20,6 @@ import (
 
 // grab the API key.
 var key string
-
-// Channel for the aggregator
-var obsCh = make(chan PredictionData)
 
 // PREDICTION Hashmap for saving which train arrives where at what time.
 var trainInfo = make(map[string][]PredictionData)
@@ -169,22 +168,6 @@ func aggregateVehiclePrediction() {
 		fmt.Printf("Status: %s\n", pred.Status)
 		fmt.Println()
 	}
-	// ==========================================================
-	// LATER THESE WILL HANDLE IN GO ROUTINE CONCURRENTLY.
-	// Chug in to the channel.
-	for _, pred := range predictions {
-		// Send it to the channel step by step.
-		obsCh <- pred
-	}
-
-	// Pull out from the channel and put in the hash map.
-	for obs := range obsCh {
-		fmt.Println("Received from channel: ", obs)
-		// Store in the hash map.
-		// vehicle ID : [] of prediction data. Append to the slice.
-		trainInfo[obs.VehicleID] = append(trainInfo[obs.VehicleID], obs)
-	}
-
 }
 
 // This grabs the vehicle IDs in the specific route.
@@ -275,36 +258,61 @@ func main() {
 		fmt.Println("Count: ", len(ids))
 		//======CONCURRENT==========
 		stopIDs := []int{70111, 70113, 70115, 70117, 70121, 70125, 70127, 70129, 70131, 70135, 70137, 70139, 70141, 70143, 70145, 70147, 70149, 70196, 71151}
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+
 		for _, val := range stopIDs {
+			wg.Add(1)
 			go func(idx int) {
+				defer wg.Done()
 				fmt.Println("ID: ", idx, "\n")
 				// Grab all the predictions concurrently.
-				predictions, err := fetchPrediction("70135") // example stop ID
+				predictions, err := fetchPrediction(strconv.Itoa(idx)) // example stop ID
 				if err != nil {
 					panic(err)
 				}
 
-				for _, pred := range predictions {
-					fmt.Println("=== Prediction ===")
-					fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
-					fmt.Printf("Stop ID: %s\n", pred.StopID)
-					fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
-					if pred.ArrivalTime != nil {
-						fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-					} else {
-						fmt.Println("Predicted Arrival: N/A")
-					}
-					if pred.DepartureTime != nil {
-						fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
-					} else {
-						fmt.Println("Predicted Departure: N/A")
-					}
-					fmt.Printf("Status: %s\n", pred.Status)
-					fmt.Println()
+				// PRINTING FOR TESTING==========================
+				// for _, pred := range predictions {
+				// 	fmt.Println("=== Prediction ===")
+				// 	fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
+				// 	fmt.Printf("Stop ID: %s\n", pred.StopID)
+				// 	fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
+				// 	if pred.ArrivalTime != nil {
+				// 		fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+				// 	} else {
+				// 		fmt.Println("Predicted Arrival: N/A")
+				// 	}
+				// 	if pred.DepartureTime != nil {
+				// 		fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
+				// 	} else {
+				// 		fmt.Println("Predicted Departure: N/A")
+				// 	}
+				// 	fmt.Printf("Status: %s\n", pred.Status)
+				// 	fmt.Println()
+				// }
+				//
+				// PRINTING FOR TESTING==========================
+
+				// lock it
+				// Inserting into the hashmap.
+				mu.Lock()
+				for _, obs := range predictions {
+					fmt.Println("Inserting: ", obs)
+					// Store in the hash map.
+					// vehicle ID : [] of prediction data. Append to the slice.
+					trainInfo[obs.VehicleID] = append(trainInfo[obs.VehicleID], obs)
 				}
+				mu.Unlock()
+
 			}(val)
 		}
+
+		// Wait for all goroutines to finish
+		wg.Wait()
+
 		//=======TESTING==========
+		fmt.Println("Current trainInfo map: ", trainInfo)
 
 		// Print extracted data
 	}
