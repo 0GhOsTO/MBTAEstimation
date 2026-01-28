@@ -37,6 +37,7 @@ type PredictionData struct {
 	DepartureTime   *time.Time // pointer because it can be null
 	Status          string
 	VehicleID       string
+	TripID          string
 }
 
 // Struct to unmarshal MBTA predictions API response
@@ -61,6 +62,12 @@ type PredictionsResponse struct {
 					Type string `json:"type"`
 				} `json:"data"`
 			} `json:"vehicle"`
+			Trip struct {
+				Data struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				} `json:"data"`
+			} `json:"trip"`
 		} `json:"relationships"`
 	} `json:"data"`
 }
@@ -137,6 +144,130 @@ func fetchPrediction(stopID string) ([]PredictionData, error) {
 	}
 
 	return predictions, nil
+}
+
+func fetchPrediction_single(stopID string, direction int) ([]PredictionData, error) {
+	// constructing the request.
+	//url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d", stopID, direction)
+	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&sort=arrival_time&page[limit]=1", stopID, direction)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("x-api-key", key)
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal JSON response
+	var predResp PredictionsResponse
+	if err := json.Unmarshal(body, &predResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal predictions: %w", err)
+	}
+
+	// Extract the fields you need
+	predictions := make([]PredictionData, 0, len(predResp.Data))
+	observationTime := time.Now() // Current time as observation time
+
+	for _, pred := range predResp.Data {
+		data := PredictionData{
+			ObservationTime: observationTime,
+			StopID:          pred.Relationships.Stop.Data.ID,
+			VehicleID:       pred.Relationships.Vehicle.Data.ID,
+			TripID:          pred.Relationships.Trip.Data.ID,
+		}
+
+		// Parse arrival time if present
+		if pred.Attributes.ArrivalTime != nil && *pred.Attributes.ArrivalTime != "" {
+			if arrivalTime, err := time.Parse(time.RFC3339, *pred.Attributes.ArrivalTime); err == nil {
+				data.ArrivalTime = &arrivalTime
+			}
+		}
+
+		// Parse departure time if present
+		if pred.Attributes.DepartureTime != nil && *pred.Attributes.DepartureTime != "" {
+			if departureTime, err := time.Parse(time.RFC3339, *pred.Attributes.DepartureTime); err == nil {
+				data.DepartureTime = &departureTime
+			}
+		}
+
+		// Set status if present
+		if pred.Attributes.Status != nil {
+			data.Status = *pred.Attributes.Status
+		}
+
+		predictions = append(predictions, data)
+	}
+
+	return predictions, nil
+}
+
+func main_singlePrediction() {
+	// B line stop IDs:
+	/* 70111 70113 70115 70117 70121 70125 70127 70129
+	70131 70135 70137 70139 70141 70143 70145 70147 70149 70196 71151
+	*/
+
+	// 1. Every 30 seconds, fetch prediction for a specific stop ID.
+	// 2. Store the fetched data until the vehicle arrives.
+	// 3. Once the vehicle arrived, grade the prediction accuracy.
+
+	// 1. Every 30 seconds ...
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	// call once right away
+	for {
+		<-ticker.C
+		// @TODO: NEED to handle in go routine
+		// NEED to handle if there is no data returned(happens sometimes due to bug in MBTA API)
+		// 1. Require to request the prediction
+		// 2.
+		// go function call
+		// Uncertainty by station vs uncertainty by the train ID.
+
+		ids, err := getTrainInRoute("Green-B")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Train IDs: ", ids)
+		fmt.Println("Count: ", len(ids))
+
+		//=======TESTING==========
+		predictions, err := fetchPrediction_single("70135", 0) // example stop ID
+		if err != nil {
+			panic(err)
+		}
+
+		// Print extracted data
+		for _, pred := range predictions {
+			fmt.Println("=== Prediction ===")
+			fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
+			fmt.Printf("Stop ID: %s\n", pred.StopID)
+			fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
+			fmt.Printf("Trip ID: %s\n", pred.TripID)
+			if pred.ArrivalTime != nil {
+				fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+			} else {
+				fmt.Println("Predicted Arrival: N/A")
+			}
+			if pred.DepartureTime != nil {
+				fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
+			} else {
+				fmt.Println("Predicted Departure: N/A")
+			}
+			fmt.Printf("Status: %s\n", pred.Status)
+			fmt.Println()
+		}
+	}
 }
 
 // This will aggregate the each extracted prediction data for the vehicle ID.
