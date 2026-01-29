@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -365,6 +364,197 @@ func getTrainInRoute(routeName string) ([]string, error) {
 	return ids, nil
 }
 
+type VehicleState struct {
+	CurrentStopSequence int
+	CurrentStopID       string
+	CurrentStatus       string
+}
+
+func fetchVehicleStates(routeName string) (map[string]VehicleState, error) {
+	url := fmt.Sprintf("https://api-v3.mbta.com/vehicles?filter[route]=%s", routeName)
+
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("x-api-key", key)
+
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Structure to unmarshal the vehicle response
+	var vehicleResp struct {
+		Data []struct {
+			ID         string `json:"id"`
+			Attributes struct {
+				CurrentStopSequence *int    `json:"current_stop_sequence"`
+				CurrentStatus       *string `json:"current_status"`
+				DirectionID         *int    `json:"direction_id"`
+			} `json:"attributes"`
+			Relationships struct {
+				Stop struct {
+					Data *struct {
+						ID   string `json:"id"`
+						Type string `json:"type"`
+					} `json:"data"`
+				} `json:"stop"`
+				Trip struct {
+					Data *struct {
+						ID   string `json:"id"`
+						Type string `json:"type"`
+					} `json:"data"`
+				} `json:"trip"`
+			} `json:"relationships"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(body, &vehicleResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal vehicle response: %w", err)
+	}
+
+	// Build the vehicle state map
+	vehicleStates := make(map[string]VehicleState)
+
+	for _, vehicle := range vehicleResp.Data {
+		state := VehicleState{}
+
+		if vehicle.Attributes.CurrentStopSequence != nil {
+			state.CurrentStopSequence = *vehicle.Attributes.CurrentStopSequence
+		}
+
+		if vehicle.Attributes.CurrentStatus != nil {
+			state.CurrentStatus = *vehicle.Attributes.CurrentStatus
+		}
+
+		if vehicle.Relationships.Stop.Data != nil {
+			state.CurrentStopID = vehicle.Relationships.Stop.Data.ID
+		}
+
+		vehicleStates[vehicle.ID] = state
+
+		// ROBUST APPROACH: vehicle → trip → predictions → next stop
+		// 1. Get the vehicle's trip_id
+		if vehicle.Relationships.Trip.Data != nil {
+			tripID := vehicle.Relationships.Trip.Data.ID
+			currentStopSeq := 0
+			if vehicle.Attributes.CurrentStopSequence != nil {
+				currentStopSeq = *vehicle.Attributes.CurrentStopSequence
+			}
+
+			// 2. Call predictions with filter[trip] and sort by stop_sequence
+			predictionURL := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[trip]=%s&sort=stop_sequence", tripID)
+			predReq, err := http.NewRequestWithContext(context.Background(), "GET", predictionURL, nil)
+			if err == nil {
+				predReq.Header.Set("x-api-key", key)
+				predResp, err := (&http.Client{}).Do(predReq)
+				if err == nil {
+					defer predResp.Body.Close()
+					predBody, err := io.ReadAll(predResp.Body)
+					if err == nil {
+						// Unmarshal predictions response with stop_sequence
+						var predResponse struct {
+							Data []struct {
+								ID         string `json:"id"`
+								Attributes struct {
+									ArrivalTime   *string `json:"arrival_time"`
+									DepartureTime *string `json:"departure_time"`
+									Status        *string `json:"status"`
+									StopSequence  *int    `json:"stop_sequence"`
+								} `json:"attributes"`
+								Relationships struct {
+									Stop struct {
+										Data struct {
+											ID   string `json:"id"`
+											Type string `json:"type"`
+										} `json:"data"`
+									} `json:"stop"`
+									Vehicle struct {
+										Data struct {
+											ID   string `json:"id"`
+											Type string `json:"type"`
+										} `json:"data"`
+									} `json:"vehicle"`
+									Trip struct {
+										Data struct {
+											ID   string `json:"id"`
+											Type string `json:"type"`
+										} `json:"data"`
+									} `json:"trip"`
+								} `json:"relationships"`
+							} `json:"data"`
+						}
+
+						if err := json.Unmarshal(predBody, &predResponse); err == nil {
+							// 3. Process all predictions for this vehicle
+							var nextPrediction *PredictionData
+							var allPredictions []PredictionData
+							observationTime := time.Now()
+
+							for _, pred := range predResponse.Data {
+								// Create prediction data for every stop in the trip
+								data := PredictionData{
+									ObservationTime: observationTime,
+									StopID:          pred.Relationships.Stop.Data.ID,
+									VehicleID:       vehicle.ID,
+									TripID:          tripID,
+								}
+
+								if pred.Attributes.ArrivalTime != nil && *pred.Attributes.ArrivalTime != "" {
+									if arrivalTime, err := time.Parse(time.RFC3339, *pred.Attributes.ArrivalTime); err == nil {
+										data.ArrivalTime = &arrivalTime
+									}
+								}
+
+								if pred.Attributes.DepartureTime != nil && *pred.Attributes.DepartureTime != "" {
+									if departureTime, err := time.Parse(time.RFC3339, *pred.Attributes.DepartureTime); err == nil {
+										data.DepartureTime = &departureTime
+									}
+								}
+
+								if pred.Attributes.Status != nil {
+									data.Status = *pred.Attributes.Status
+								}
+
+								// Add to all predictions for trainInfo
+								allPredictions = append(allPredictions, data)
+
+								// Find the next stop: smallest stop_sequence > current_stop_sequence
+								if pred.Attributes.StopSequence != nil && *pred.Attributes.StopSequence > currentStopSeq {
+									if nextPrediction == nil {
+										// First valid next stop (since sorted by stop_sequence)
+										temp := data
+										nextPrediction = &temp
+									}
+								}
+							}
+
+							// 4. Save all predictions to trainInfo (full trip data)
+							if len(allPredictions) > 0 {
+								trainInfo[vehicle.ID] = allPredictions
+							}
+
+							// 5. Save only the next stop to trainNextStop
+							if nextPrediction != nil {
+								trainNextStop[vehicle.ID] = []PredictionData{*nextPrediction}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return vehicleStates, nil
+}
+
 func main() {
 	// B line stop IDs:
 	/* 70111 70113 70115 70117 70121 70125 70127 70129
@@ -388,97 +578,13 @@ func main() {
 		// go function call
 		// Uncertainty by station vs uncertainty by the train ID.
 
-		ids, err := getTrainInRoute("Green-B")
-		if err != nil {
-			panic(err)
+		// Fetch vehicle states and populate both trainInfo and trainNextStop
+		vs, error := fetchVehicleStates("Green-B")
+		if error != nil {
+			panic(error)
 		}
-		fmt.Println("Train IDs: ", ids)
-		fmt.Println("Count: ", len(ids))
-		//======CONCURRENT==========
-		stopIDs := []int{70111, 70113, 70115, 70117, 70121, 70125, 70127, 70129, 70131, 70135, 70137, 70139, 70141, 70143, 70145, 70147, 70149, 70196, 71151}
-		var wg sync.WaitGroup
-		var mu sync.Mutex
-
-		for _, val := range stopIDs {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				fmt.Println("ID: ", idx, "\n")
-				// Grab all the predictions concurrently.
-				predictions, err := fetchPrediction(strconv.Itoa(idx)) // example stop ID
-				if err != nil {
-					panic(err)
-				}
-
-				// PRINTING FOR TESTING==========================
-				// for _, pred := range predictions {
-				// 	fmt.Println("=== Prediction ===")
-				// 	fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
-				// 	fmt.Printf("Stop ID: %s\n", pred.StopID)
-				// 	fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
-				// 	if pred.ArrivalTime != nil {
-				// 		fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-				// 	} else {
-				// 		fmt.Println("Predicted Arrival: N/A")
-				// 	}
-				// 	if pred.DepartureTime != nil {
-				// 		fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
-				// 	} else {
-				// 		fmt.Println("Predicted Departure: N/A")
-				// 	}
-				// 	fmt.Printf("Status: %s\n", pred.Status)
-				// 	fmt.Println()
-				// }
-				//
-				// PRINTING FOR TESTING==========================
-
-				// lock it
-				// Inserting into the hashmap.
-				mu.Lock()
-				for _, obs := range predictions {
-					fmt.Println("Inserting: ", obs)
-					// Store in the hash map.
-					// vehicle ID : [] of prediction data. Append to the slice.
-					trainInfo[obs.VehicleID] = append(trainInfo[obs.VehicleID], obs)
-					// Also store in tempTrainInfo for next stop calculation
-					tempTrainInfo[obs.VehicleID] = append(tempTrainInfo[obs.VehicleID], obs)
-				}
-				mu.Unlock()
-
-			}(val)
-		}
-
-		// Wait for all goroutines to finish
-		wg.Wait()
-
-		//=======TESTING==========
-		fmt.Println("Current trainInfo map: ", trainInfo)
-
-		// Sort tempTrainInfo by arrival time and update trainNextStop
-		for vehicleID, predictions := range tempTrainInfo {
-			if len(predictions) == 0 {
-				continue
-			}
-
-			// Sort predictions by arrival time (ascending - earliest first)
-			sort.Slice(predictions, func(i, j int) bool {
-				if predictions[i].ArrivalTime == nil {
-					return false
-				}
-				if predictions[j].ArrivalTime == nil {
-					return true
-				}
-				return predictions[i].ArrivalTime.Before(*predictions[j].ArrivalTime)
-			})
-
-			// Keep only the next stop (earliest arrival)
-			if predictions[0].ArrivalTime != nil {
-				trainNextStop[vehicleID] = []PredictionData{predictions[0]}
-			}
-		}
-		// Print trainNextStop for testing
-		fmt.Println("\nNext stops for each train:", trainNextStop)
-
+		fmt.Println("\n\nVehicle States: ", vs)
+		fmt.Println("Next stop predictions:", trainNextStop)
 		// Clear tempTrainInfo for next iteration
 		tempTrainInfo = make(map[string][]PredictionData)
 	}
@@ -490,3 +596,26 @@ func main() {
 
 //Mathematical equations
 //error = | predicted_arrival_time - actual_arrival_time |
+
+		fmt.Println("\n=== Vehicle States ===")
+		for vehicleID, state := range vs {
+			fmt.Printf("Vehicle %s: Stop %s, Sequence %d, Status %s\n", 
+				vehicleID, state.CurrentStopID, state.CurrentStopSequence, state.CurrentStatus)
+		}
+
+		fmt.Println("\n=== Train Info (All Predictions per Vehicle) ===")
+		for vehicleID, predictions := range trainInfo {
+			fmt.Printf("Vehicle %s has %d predictions for its trip\n", vehicleID, len(predictions))
+		}
+
+		fmt.Println("\n=== Train Next Stop (Only Next Stop per Vehicle) ===")
+		for vehicleID, predictions := range trainNextStop {
+			if len(predictions) > 0 {
+				pred := predictions[0]
+				fmt.Printf("Vehicle %s → Next Stop: %s", vehicleID, pred.StopID)
+				if pred.ArrivalTime != nil {
+					fmt.Printf(" (ETA: %s)", pred.ArrivalTime.Format("15:04:05"))
+				}
+				fmt.Println()
+			}
+		}
