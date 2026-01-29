@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -23,6 +24,12 @@ var key string
 
 // PREDICTION Hashmap for saving which train arrives where at what time.
 var trainInfo = make(map[string][]PredictionData)
+
+// Temporary storage for predictions before determining next stop
+var tempTrainInfo = make(map[string][]PredictionData)
+
+// Final storage for each train's next stop prediction
+var trainNextStop = make(map[string][]PredictionData)
 
 // Struct to hold prediction data
 // 1. observation time
@@ -433,6 +440,8 @@ func main() {
 					// Store in the hash map.
 					// vehicle ID : [] of prediction data. Append to the slice.
 					trainInfo[obs.VehicleID] = append(trainInfo[obs.VehicleID], obs)
+					// Also store in tempTrainInfo for next stop calculation
+					tempTrainInfo[obs.VehicleID] = append(tempTrainInfo[obs.VehicleID], obs)
 				}
 				mu.Unlock()
 
@@ -445,7 +454,33 @@ func main() {
 		//=======TESTING==========
 		fmt.Println("Current trainInfo map: ", trainInfo)
 
-		// Print extracted data
+		// Sort tempTrainInfo by arrival time and update trainNextStop
+		for vehicleID, predictions := range tempTrainInfo {
+			if len(predictions) == 0 {
+				continue
+			}
+
+			// Sort predictions by arrival time (ascending - earliest first)
+			sort.Slice(predictions, func(i, j int) bool {
+				if predictions[i].ArrivalTime == nil {
+					return false
+				}
+				if predictions[j].ArrivalTime == nil {
+					return true
+				}
+				return predictions[i].ArrivalTime.Before(*predictions[j].ArrivalTime)
+			})
+
+			// Keep only the next stop (earliest arrival)
+			if predictions[0].ArrivalTime != nil {
+				trainNextStop[vehicleID] = []PredictionData{predictions[0]}
+			}
+		}
+		// Print trainNextStop for testing
+		fmt.Println("\nNext stops for each train:", trainNextStop)
+
+		// Clear tempTrainInfo for next iteration
+		tempTrainInfo = make(map[string][]PredictionData)
 	}
 }
 
