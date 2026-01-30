@@ -7,7 +7,7 @@ A real-time MBTA Green Line prediction accuracy tracker with an interactive web 
 This project tracks and displays the trustworthiness of MBTA (Massachusetts Bay Transportation Authority) train arrival predictions by comparing predicted vs. actual arrival times.
 
 ## Current Progress
-
+## [Google Document of Progress](https://docs.google.com/document/d/1L1Hdq-_mwZ33vqSe75HmYA38mVIf2xTeh4whlfj5yr4/edit?usp=sharing)
 ### Frontend ✅
 - **Interactive Map**: Leaflet-based map showing all Green Line stations (B, C, D, E)
 - **Line Selection**: Dropdown menu to switch between Green Line branches
