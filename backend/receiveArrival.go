@@ -20,6 +20,26 @@ var actualTrainInfo = make(map[string]ActualData)
 // save the next stop information for each vehicle
 var vehicleNextStop = make(map[string]string)
 
+var stationGeoLocation = map[string][2]float64{
+	"70106": {42.34018, -71.16709}, // Boston College
+	"70110": {42.33972, -71.16070}, // South Street
+	"70112": {42.33843, -71.15274}, // Chestnut Hill Ave
+	"70113": {42.33847, -71.15282}, // Chiswick Road
+	"70114": {42.33907, -71.14606}, // Sutherland Road
+	"70117": {42.34313, -71.14130}, // Washington Street
+	"70121": {42.34413, -71.14262}, // Warren Street
+	"70130": {42.35013, -71.13158}, // Allston Street
+	"70134": {42.35118, -71.12192}, // Griggs Street
+	"70144": {42.35005, -71.10722}, // Harvard Avenue
+	"70146": {42.35103, -71.11671}, // Packards Corner
+	"70147": {42.35187, -71.12109}, // Babcock Street
+	"70153": {42.35188, -71.12068}, // Pleasant Street
+	"70154": {42.34788, -71.08627}, // St. Paul Street
+	"70155": {42.35018, -71.07710}, // Kent Street
+	"70157": {42.34956, -71.09979}, // Blandford Street
+	"70159": {42.34882, -71.09564}, // Kenmore
+}
+
 // mutex for protecting shared maps from race conditions
 var mapMutex sync.RWMutex
 
@@ -268,6 +288,8 @@ func actualArrivalMoment(routeName string) {
 		}
 
 		// 3. Continuously poll from the API and check how close the vehicle is to the next stop.
+		// Compare the geolocation of the next stop and the vehicle's current geolocation.\
+		// Checking the geolocation of the each station
 
 		<-ticker.C
 	}
