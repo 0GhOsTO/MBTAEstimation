@@ -6,33 +6,83 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	"sync"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
-func init() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("No .env found")
-	}
-	key = os.Getenv("MBTA_API_KEY")
-	if key == "" {
-		panic("MBTA_API_KEY not set")
-	}
+// save the actual Train Information
+var actualTrainInfo = make(map[string]ActualData)
+
+// save the next stop information for each vehicle
+var vehicleNextStop = make(map[string]string)
+
+// mutex for protecting shared maps from race conditions
+var mapMutex sync.RWMutex
+
+type ActualData struct {
+	VehicleID       string
+	ObservationTime time.Time
+	Status          string
+	RelatedStop     string
+	Latitude        float64
+	Longitude       float64
+}
+
+// Struct to unmarshal MBTA vehicles API response
+type VehiclesResponse struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Attributes struct {
+			CurrentStatus       string  `json:"current_status"`
+			Latitude            float64 `json:"latitude"`
+			Longitude           float64 `json:"longitude"`
+			UpdatedAt           string  `json:"updated_at"`
+			CurrentStopSequence *int    `json:"current_stop_sequence"`
+		} `json:"attributes"`
+		Relationships struct {
+			Stop struct {
+				Data *struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			} `json:"stop"`
+			Trip struct {
+				Data *struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			} `json:"trip"`
+		} `json:"relationships"`
+	} `json:"data"`
+}
+
+// Struct to unmarshal MBTA schedule/predictions API response for next stops
+type TripIDResponse struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Attributes struct {
+			ArrivalTime   *string `json:"arrival_time"`
+			DepartureTime *string `json:"departure_time"`
+			StopSequence  int     `json:"stop_sequence"`
+		} `json:"attributes"`
+		Relationships struct {
+			Stop struct {
+				Data struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			} `json:"stop"`
+		} `json:"relationships"`
+	} `json:"data"`
 }
 
 func actualArrivalMoment(routeName string) {
-	// 1. Every 30 seconds ...
+	// Every 30 seconds ...
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	// call once right away
 	for {
-		<-ticker.C
 		// @TODO: NEED to handle in go routine
 		// 1. Fetch data from the MBTA API the line.
 		url := fmt.Sprintf("https://api-v3.mbta.com/vehicles?filter[route]=%s", routeName)
@@ -47,14 +97,178 @@ func actualArrivalMoment(routeName string) {
 		if err != nil {
 			panic(err)
 		}
-		// Close the response body when it is done.
-		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			panic(err)
 		}
-		// Test printing out the body if it correctly received.
-		fmt.Println(string(body) + "\n")
+		resp.Body.Close()
+
+		// Successfully received data from the MBTA API.
+		// =============================================
+		// TEST PRINT
+		fmt.Println("Received: ", string(body))
+
+		// 1. Save the status, related stop, longitude, latitude inside the actualTrainInfo map.
+		var vehiclesResp VehiclesResponse
+		err = json.Unmarshal(body, &vehiclesResp)
+		if err != nil {
+			fmt.Printf("Error parsing JSON: %v\n", err)
+			continue
+		}
+
+		for _, vehicle := range vehiclesResp.Data {
+			observationTime, err := time.Parse(time.RFC3339, vehicle.Attributes.UpdatedAt)
+			if err != nil {
+				observationTime = time.Now()
+			}
+
+			relatedStop := ""
+			if vehicle.Relationships.Stop.Data != nil {
+				relatedStop = vehicle.Relationships.Stop.Data.ID
+			}
+
+			mapMutex.Lock()
+			actualTrainInfo[vehicle.ID] = ActualData{
+				VehicleID:       vehicle.ID,
+				ObservationTime: observationTime,
+				Status:          vehicle.Attributes.CurrentStatus,
+				RelatedStop:     relatedStop,
+				Latitude:        vehicle.Attributes.Latitude,
+				Longitude:       vehicle.Attributes.Longitude,
+			}
+			mapMutex.Unlock()
+		}
+
+		fmt.Printf("Updated %d vehicles in actualTrainInfo\n", len(vehiclesResp.Data))
+
+		// 2. Update where is the next stop for the each vehicle.
+		for _, vehicle := range vehiclesResp.Data {
+			currentStatus := vehicle.Attributes.CurrentStatus
+
+			// GTFS-RT assumes IN_TRANSIT_TO if status is missing/empty
+			if currentStatus == "" {
+				currentStatus = "IN_TRANSIT_TO"
+			}
+
+			// Check if vehicle is in transit or incoming - status tells us the referenced stop is the next stop
+			isApproaching := currentStatus == "IN_TRANSIT_TO" || currentStatus == "INCOMING_AT"
+
+			if isApproaching {
+				// The relationships.stop.data.id already is the next stop - no API call needed
+				if vehicle.Relationships.Stop.Data != nil {
+					mapMutex.Lock()
+					vehicleNextStop[vehicle.ID] = vehicle.Relationships.Stop.Data.ID
+					mapMutex.Unlock()
+					fmt.Printf("Vehicle %s (status: %s) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
+				} else {
+					// No stop relationship - clear stale entry
+					mapMutex.Lock()
+					delete(vehicleNextStop, vehicle.ID)
+					mapMutex.Unlock()
+					fmt.Printf("Vehicle %s (status: %s) has no stop relationship - clearing next stop\n", vehicle.ID, currentStatus)
+				}
+			} else if currentStatus == "STOPPED_AT" {
+				// Vehicle is stopped, need to find next stop using predictions
+				if vehicle.Relationships.Trip.Data != nil {
+					tripID := vehicle.Relationships.Trip.Data.ID
+					currentStopSeq := 0
+					if vehicle.Attributes.CurrentStopSequence != nil {
+						currentStopSeq = *vehicle.Attributes.CurrentStopSequence
+					}
+
+					// Fetch predictions for this trip to find the next stop
+					predURL := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[trip]=%s&sort=stop_sequence", tripID)
+					predReq, err := http.NewRequestWithContext(context.Background(), "GET", predURL, nil)
+					if err != nil {
+						fmt.Printf("Error creating prediction request for vehicle %s: %v\n", vehicle.ID, err)
+						// Clear stale entry on error
+						mapMutex.Lock()
+						delete(vehicleNextStop, vehicle.ID)
+						mapMutex.Unlock()
+						continue
+					}
+					predReq.Header.Set("x-api-key", key)
+
+					predResp, err := client.Do(predReq)
+					if err != nil {
+						fmt.Printf("Error fetching predictions for vehicle %s: %v\n", vehicle.ID, err)
+						// Clear stale entry on error
+						mapMutex.Lock()
+						delete(vehicleNextStop, vehicle.ID)
+						mapMutex.Unlock()
+						continue
+					}
+
+					predBody, err := io.ReadAll(predResp.Body)
+					predResp.Body.Close()
+					if err != nil {
+						fmt.Printf("Error reading prediction response for vehicle %s: %v\n", vehicle.ID, err)
+						// Clear stale entry on error
+						mapMutex.Lock()
+						delete(vehicleNextStop, vehicle.ID)
+						mapMutex.Unlock()
+						continue
+					}
+
+					var tripData TripIDResponse
+					err = json.Unmarshal(predBody, &tripData)
+					if err != nil {
+						fmt.Printf("Error parsing prediction JSON for vehicle %s: %v\n", vehicle.ID, err)
+						// Clear stale entry on error
+						mapMutex.Lock()
+						delete(vehicleNextStop, vehicle.ID)
+						mapMutex.Unlock()
+						continue
+					}
+
+					// Find the next stop (stop with sequence strictly > current sequence)
+					nextStop := ""
+					for _, pred := range tripData.Data {
+						if pred.Attributes.StopSequence > currentStopSeq {
+							nextStop = pred.Relationships.Stop.Data.ID
+							break
+						}
+					}
+
+					if nextStop != "" {
+						mapMutex.Lock()
+						vehicleNextStop[vehicle.ID] = nextStop
+						mapMutex.Unlock()
+						fmt.Printf("Vehicle %s (status: %s) next stop after current: %s\n", vehicle.ID, currentStatus, nextStop)
+					} else {
+						// Could not determine next stop - clear stale entry
+						mapMutex.Lock()
+						delete(vehicleNextStop, vehicle.ID)
+						mapMutex.Unlock()
+						fmt.Printf("Vehicle %s (status: %s) could not determine next stop - clearing entry\n", vehicle.ID, currentStatus)
+					}
+				} else {
+					// No trip data - clear stale entry
+					mapMutex.Lock()
+					delete(vehicleNextStop, vehicle.ID)
+					mapMutex.Unlock()
+					fmt.Printf("Vehicle %s (status: %s) has no trip data - clearing next stop\n", vehicle.ID, currentStatus)
+				}
+			} else {
+				// Handle other statuses by treating them like IN_TRANSIT_TO if a stop relationship exists
+				if vehicle.Relationships.Stop.Data != nil {
+					mapMutex.Lock()
+					vehicleNextStop[vehicle.ID] = vehicle.Relationships.Stop.Data.ID
+					mapMutex.Unlock()
+					fmt.Printf("Vehicle %s (status: %s - treating as approaching) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
+				} else {
+					// No stop relationship - clear stale entry
+					mapMutex.Lock()
+					delete(vehicleNextStop, vehicle.ID)
+					mapMutex.Unlock()
+					fmt.Printf("Vehicle %s (status: %s) has no stop relationship - clearing next stop\n", vehicle.ID, currentStatus)
+				}
+			}
+		}
+
+		// 3. Continuously poll from the API and check how close the vehicle is to the next stop.
+
+		<-ticker.C
 	}
 }
