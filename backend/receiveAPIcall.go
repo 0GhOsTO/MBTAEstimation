@@ -11,8 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strconv"
-	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -152,32 +150,32 @@ func fetchPrediction(stopID string) ([]PredictionData, error) {
 	return predictions, nil
 }
 
-func fetchPrediction_single(stopID string, direction int) ([]PredictionData, error) {
+func fetchPrediction_single(stopID string, direction int) (PredictionData, string, error) {
 	// constructing the request.
 	//url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d", stopID, direction)
-	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&sort=arrival_time&page[limit]=1", stopID, direction)
+	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&sort=arrival_time&page[limit]=2", stopID, direction)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return PredictionData{}, "nil", err
 	}
 	req.Header.Set("x-api-key", key)
 	client := &http.Client{}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return PredictionData{}, "nil", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return PredictionData{}, "nil", err
 	}
 
 	// Unmarshal JSON response
 	var predResp PredictionsResponse
 	if err := json.Unmarshal(body, &predResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal predictions: %w", err)
+		return PredictionData{}, "nil", fmt.Errorf("failed to unmarshal predictions: %w", err)
 	}
 
 	// Extract the fields you need
@@ -214,10 +212,14 @@ func fetchPrediction_single(stopID string, direction int) ([]PredictionData, err
 		predictions = append(predictions, data)
 	}
 
-	return predictions, nil
+	res := predictions[1]
+
+	vehicle := res.VehicleID
+
+	return res, vehicle, nil
 }
 
-func main_singlePrediction() {
+func main() {
 	// B line stop IDs:
 	/* 70111 70113 70115 70117 70121 70125 70127 70129
 	70131 70135 70137 70139 70141 70143 70145 70147 70149 70196 71151
@@ -248,31 +250,29 @@ func main_singlePrediction() {
 		fmt.Println("Count: ", len(ids))
 
 		//=======TESTING==========
-		predictions, err := fetchPrediction_single("70135", 0) // example stop ID
+		pred, _, err := fetchPrediction_single("70135", 0) // example stop ID
 		if err != nil {
 			panic(err)
 		}
 
 		// Print extracted data
-		for _, pred := range predictions {
-			fmt.Println("=== Prediction ===")
-			fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
-			fmt.Printf("Stop ID: %s\n", pred.StopID)
-			fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
-			fmt.Printf("Trip ID: %s\n", pred.TripID)
-			if pred.ArrivalTime != nil {
-				fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-			} else {
-				fmt.Println("Predicted Arrival: N/A")
-			}
-			if pred.DepartureTime != nil {
-				fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
-			} else {
-				fmt.Println("Predicted Departure: N/A")
-			}
-			fmt.Printf("Status: %s\n", pred.Status)
-			fmt.Println()
+		fmt.Println("=== Prediction ===")
+		fmt.Printf("Observation Time: %s\n", pred.ObservationTime.Format(time.RFC3339))
+		fmt.Printf("Stop ID: %s\n", pred.StopID)
+		fmt.Printf("Vehicle ID: %s\n", pred.VehicleID)
+		fmt.Printf("Trip ID: %s\n", pred.TripID)
+		if pred.ArrivalTime != nil {
+			fmt.Printf("Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+		} else {
+			fmt.Println("Predicted Arrival: N/A")
 		}
+		if pred.DepartureTime != nil {
+			fmt.Printf("Predicted Departure: %s\n", pred.DepartureTime.Format(time.RFC3339))
+		} else {
+			fmt.Println("Predicted Departure: N/A")
+		}
+		fmt.Printf("Status: %s\n", pred.Status)
+		fmt.Println()
 	}
 }
 
@@ -555,40 +555,40 @@ func fetchVehicleStates(routeName string) (map[string]VehicleState, error) {
 	return vehicleStates, nil
 }
 
-func main() {
-	// B line stop IDs:
-	/* 70111 70113 70115 70117 70121 70125 70127 70129
-	70131 70135 70137 70139 70141 70143 70145 70147 70149 70196 71151
-	*/
+// func main() {
+// 	// B line stop IDs:
+// 	/* 70111 70113 70115 70117 70121 70125 70127 70129
+// 	70131 70135 70137 70139 70141 70143 70145 70147 70149 70196 71151
+// 	*/
 
-	// 1. Every 30 seconds, fetch prediction for a specific stop ID.
-	// 2. Store the fetched data until the vehicle arrives.
-	// 3. Once the vehicle arrived, grade the prediction accuracy.
+// 	// 1. Every 30 seconds, fetch prediction for a specific stop ID.
+// 	// 2. Store the fetched data until the vehicle arrives.
+// 	// 3. Once the vehicle arrived, grade the prediction accuracy.
 
-	// 1. Every 30 seconds ...
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	// call once right away
-	for {
-		<-ticker.C
-		// @TODO: NEED to handle in go routine
-		// NEED to handle if there is no data returned(happens sometimes due to bug in MBTA API)
-		// 1. Require to request the prediction
-		// 2.
-		// go function call
-		// Uncertainty by station vs uncertainty by the train ID.
+// 	// 1. Every 30 seconds ...
+// 	ticker := time.NewTicker(30 * time.Second)
+// 	defer ticker.Stop()
+// 	// call once right away
+// 	for {
+// 		<-ticker.C
+// 		// @TODO: NEED to handle in go routine
+// 		// NEED to handle if there is no data returned(happens sometimes due to bug in MBTA API)
+// 		// 1. Require to request the prediction
+// 		// 2.
+// 		// go function call
+// 		// Uncertainty by station vs uncertainty by the train ID.
 
-		// Fetch vehicle states and populate both trainInfo and trainNextStop
-		vs, error := fetchVehicleStates("Green-B")
-		if error != nil {
-			panic(error)
-		}
-		fmt.Println("\n\nVehicle States: ", vs)
-		fmt.Println("Next stop predictions:", trainNextStop)
-		// Clear tempTrainInfo for next iteration
-		tempTrainInfo = make(map[string][]PredictionData)
-	}
-}
+// 		// Fetch vehicle states and populate both trainInfo and trainNextStop
+// 		vs, error := fetchVehicleStates("Green-B")
+// 		if error != nil {
+// 			panic(error)
+// 		}
+// 		fmt.Println("\n\nVehicle States: ", vs)
+// 		fmt.Println("Next stop predictions:", trainNextStop)
+// 		// Clear tempTrainInfo for next iteration
+// 		tempTrainInfo = make(map[string][]PredictionData)
+// 	}
+// }
 
 // Summarizing the progress for readme
 // Had hard time to understand the API due to the error case when it returns blank or null
@@ -597,25 +597,25 @@ func main() {
 //Mathematical equations
 //error = | predicted_arrival_time - actual_arrival_time |
 
-		fmt.Println("\n=== Vehicle States ===")
-		for vehicleID, state := range vs {
-			fmt.Printf("Vehicle %s: Stop %s, Sequence %d, Status %s\n", 
-				vehicleID, state.CurrentStopID, state.CurrentStopSequence, state.CurrentStatus)
-		}
+// fmt.Println("\n=== Vehicle States ===")
+// for vehicleID, state := range vs {
+// 	fmt.Printf("Vehicle %s: Stop %s, Sequence %d, Status %s\n",
+// 		vehicleID, state.CurrentStopID, state.CurrentStopSequence, state.CurrentStatus)
+// }
 
-		fmt.Println("\n=== Train Info (All Predictions per Vehicle) ===")
-		for vehicleID, predictions := range trainInfo {
-			fmt.Printf("Vehicle %s has %d predictions for its trip\n", vehicleID, len(predictions))
-		}
+// fmt.Println("\n=== Train Info (All Predictions per Vehicle) ===")
+// for vehicleID, predictions := range trainInfo {
+// 	fmt.Printf("Vehicle %s has %d predictions for its trip\n", vehicleID, len(predictions))
+// }
 
-		fmt.Println("\n=== Train Next Stop (Only Next Stop per Vehicle) ===")
-		for vehicleID, predictions := range trainNextStop {
-			if len(predictions) > 0 {
-				pred := predictions[0]
-				fmt.Printf("Vehicle %s → Next Stop: %s", vehicleID, pred.StopID)
-				if pred.ArrivalTime != nil {
-					fmt.Printf(" (ETA: %s)", pred.ArrivalTime.Format("15:04:05"))
-				}
-				fmt.Println()
-			}
-		}
+// fmt.Println("\n=== Train Next Stop (Only Next Stop per Vehicle) ===")
+// for vehicleID, predictions := range trainNextStop {
+// 	if len(predictions) > 0 {
+// 		pred := predictions[0]
+// 		fmt.Printf("Vehicle %s → Next Stop: %s", vehicleID, pred.StopID)
+// 		if pred.ArrivalTime != nil {
+// 			fmt.Printf(" (ETA: %s)", pred.ArrivalTime.Format("15:04:05"))
+// 		}
+// 		fmt.Println()
+// 	}
+// }
