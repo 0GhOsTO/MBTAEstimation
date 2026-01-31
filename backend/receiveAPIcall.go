@@ -153,6 +153,7 @@ func fetchPrediction(stopID string) ([]PredictionData, error) {
 func fetchPrediction_single(stopID string, direction int) (PredictionData, string, error) {
 	// constructing the request.
 	//url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d", stopID, direction)
+	// gets the next two predictions for the stop and direction, sorted by arrival time
 	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&sort=arrival_time&page[limit]=2", stopID, direction)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
@@ -212,8 +213,9 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 		predictions = append(predictions, data)
 	}
 
+	// Return the second prediction
 	res := predictions[1]
-
+	// Extract vehicle ID of the second prediction
 	vehicle := res.VehicleID
 
 	return res, vehicle, nil
