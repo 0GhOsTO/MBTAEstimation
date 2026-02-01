@@ -159,11 +159,6 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 }
 
 func main_test_pred() {
-	// B line stop IDs:
-	/* 70111 70113 70115 70117 70121 70125 70127 70129
-	70131 70135 70137 70139 70141 70143 70145 70147 70149 70196 71151
-	*/
-
 	// 1. Every 30 seconds, fetch prediction for a specific stop ID.
 	// 2. Store the fetched data until the vehicle arrives.
 	// 3. Once the vehicle arrived, grade the prediction accuracy.
