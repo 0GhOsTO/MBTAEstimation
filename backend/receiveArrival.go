@@ -24,6 +24,9 @@ var vehicleNextStop = make(map[string]string)
 // dynamically store stop geolocations fetched from the API
 var dynamicStopGeoLocation = make(map[string][2]float64)
 
+// dynamically store stop ID to parent station (place ID) mapping
+var stopToParentStation = make(map[string]string)
+
 // track consecutive detections within 20m for each vehicle
 var vehicleProximityCount = make(map[string]int)
 
@@ -39,7 +42,6 @@ var stationGeoLocation = map[string][2]float64{
 	"70134": {42.35118, -71.12192}, // Griggs Street
 	"70144": {42.35005, -71.10722}, // Harvard Avenue
 	"70146": {42.35103, -71.11671}, // Packards Corner
-	"70147": {42.35187, -71.12109}, // Babcock Street
 	"70153": {42.35188, -71.12068}, // Pleasant Street
 	"70154": {42.34788, -71.08627}, // St. Paul Street
 	"70155": {42.35018, -71.07710}, // Kent Street
@@ -47,8 +49,32 @@ var stationGeoLocation = map[string][2]float64{
 	"70159": {42.34882, -71.09564}, // Kenmore
 }
 
+// Static mapping of platform IDs to parent station (place) IDs for Green Line B
+var staticStopToParentStation = map[string]string{
+	"70106": "place-brico", // Boston College
+	"70110": "place-sougr", // South Street
+	"70112": "place-chstl", // Chestnut Hill Ave
+	"70113": "place-chswk", // Chiswick Road
+	"70114": "place-sthld", // Sutherland Road
+	"70117": "place-wascm", // Washington Street
+	"70121": "place-wrnst", // Warren Street
+	"70130": "place-alsgr", // Allston Street
+	"70134": "place-grigg", // Griggs Street
+	"70144": "place-harvd", // Harvard Avenue
+	"70146": "place-pakrd", // Packards Corner
+	"70153": "place-plsgr", // Pleasant Street
+	"70154": "place-stpul", // St. Paul Street
+	"70155": "place-kntst", // Kent Street
+	"70157": "place-bland", // Blandford Street
+	"70159": "place-kencl", // Kenmore
+}
+
+// NEED TO START FROM HERE =======================================
+
 // mutex for protecting shared maps from race conditions
 var mapMutex sync.RWMutex
+
+// Note: 'key' variable is declared and initialized in receiveAPIcall.go
 
 type ActualData struct {
 	VehicleID       string
@@ -57,6 +83,7 @@ type ActualData struct {
 	RelatedStop     string
 	Latitude        float64
 	Longitude       float64
+	DirectionID     int
 }
 
 // Struct to unmarshal MBTA vehicles API response
@@ -69,6 +96,7 @@ type VehiclesResponse struct {
 			Longitude           float64 `json:"longitude"`
 			UpdatedAt           string  `json:"updated_at"`
 			CurrentStopSequence *int    `json:"current_stop_sequence"`
+			DirectionID         int     `json:"direction_id"`
 		} `json:"attributes"`
 		Relationships struct {
 			Stop struct {
@@ -112,6 +140,13 @@ type SR struct {
 			Latitude  float64 `json:"latitude"`
 			Longitude float64 `json:"longitude"`
 		} `json:"attributes"`
+		Relationships struct {
+			ParentStation struct {
+				Data *struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			} `json:"parent_station"`
+		} `json:"relationships"`
 	} `json:"data"`
 }
 
@@ -169,11 +204,19 @@ func fetchStopGeolocation(stopID string, client *http.Client) ([2]float64, error
 	}
 
 	coords := [2]float64{stopData.Data.Attributes.Latitude, stopData.Data.Attributes.Longitude}
+
+	// Extract parent station ID if available
+	parentStationID := stopID // Default to stop ID if no parent
+	if stopData.Data.Relationships.ParentStation.Data != nil {
+		parentStationID = stopData.Data.Relationships.ParentStation.Data.ID
+	}
+
 	mapMutex.Lock()
 	dynamicStopGeoLocation[stopID] = coords
+	stopToParentStation[stopID] = parentStationID
 	mapMutex.Unlock()
 
-	fmt.Printf("Fetched geolocation for stop %s: [%.5f, %.5f]\n", stopID, coords[0], coords[1])
+	fmt.Printf("Fetched geolocation for stop %s (parent: %s): [%.5f, %.5f]\n", stopID, parentStationID, coords[0], coords[1])
 	return coords, nil
 }
 
@@ -228,6 +271,8 @@ func actualArrivalMoment(routeName string) {
 				relatedStop = vehicle.Relationships.Stop.Data.ID
 			}
 
+			directionID := vehicle.Attributes.DirectionID
+
 			mapMutex.Lock()
 			actualTrainInfo[vehicle.ID] = ActualData{
 				VehicleID:       vehicle.ID,
@@ -236,11 +281,29 @@ func actualArrivalMoment(routeName string) {
 				RelatedStop:     relatedStop,
 				Latitude:        vehicle.Attributes.Latitude,
 				Longitude:       vehicle.Attributes.Longitude,
+				DirectionID:     directionID,
 			}
 			mapMutex.Unlock()
 		}
 
 		fmt.Printf("Updated %d vehicles in actualTrainInfo\n", len(vehiclesResp.Data))
+
+		// CLEANING THE STALE RESPONSE.
+		currentVehicleIDs := make(map[string]bool)
+		for _, vehicle := range vehiclesResp.Data {
+			currentVehicleIDs[vehicle.ID] = true
+		}
+
+		mapMutex.Lock()
+		for vehicleID := range actualTrainInfo {
+			if !currentVehicleIDs[vehicleID] {
+				delete(actualTrainInfo, vehicleID)
+				delete(vehicleNextStop, vehicleID)
+				delete(vehicleProximityCount, vehicleID)
+				fmt.Printf("Cleaned up stale vehicle: %s\n", vehicleID)
+			}
+		}
+		mapMutex.Unlock()
 
 		// 2. Update where is the next stop for the each vehicle.
 		// Only update if the vehicle has left the 20m radius of the current next stop
@@ -373,8 +436,20 @@ func actualArrivalMoment(routeName string) {
 		// consider the vehicle is about arrive at the next stop.
 		// print [STOPID, VEHICLEID, TIMESTAMP]
 
-		for vehicleID, actualData := range actualTrainInfo {
-			nextStopID, hasNextStop := vehicleNextStop[vehicleID]
+		// Create a snapshot of the data to avoid holding locks during iteration
+		mapMutex.RLock()
+		vehicleSnapshot := make(map[string]ActualData)
+		for k, v := range actualTrainInfo {
+			vehicleSnapshot[k] = v
+		}
+		nextStopSnapshot := make(map[string]string)
+		for k, v := range vehicleNextStop {
+			nextStopSnapshot[k] = v
+		}
+		mapMutex.RUnlock()
+
+		for vehicleID, actualData := range vehicleSnapshot {
+			nextStopID, hasNextStop := nextStopSnapshot[vehicleID]
 			if !hasNextStop {
 				// No next stop - reset proximity count
 				mapMutex.Lock()
@@ -402,11 +477,25 @@ func actualArrivalMoment(routeName string) {
 				// Within 20m - increment count
 				vehicleProximityCount[vehicleID]++
 
-				if vehicleProximityCount[vehicleID] >= 2 {
+				if vehicleProximityCount[vehicleID] == 2 {
 					// Detected 2 consecutive times within 20m - vehicle is arriving
 					// WILL BE IN FORM OF RETURN
-					fmt.Printf("[%s, %s, %s] - Vehicle arriving (distance: %.2fm, count: %d)\n",
-						nextStopID, vehicleID, actualData.ObservationTime.Format(time.RFC3339), distance, vehicleProximityCount[vehicleID])
+					// Get parent station (place ID) for output
+					placeID := staticStopToParentStation[nextStopID]
+					if placeID == "" {
+						// Check dynamic mapping if not in static
+						mapMutex.RLock()
+						placeID = stopToParentStation[nextStopID]
+						mapMutex.RUnlock()
+					}
+					if placeID == "" {
+						placeID = nextStopID // Fallback to stop ID if parent not found
+					}
+					fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
+						placeID, vehicleID, actualData.ObservationTime.Format(time.RFC3339), actualData.DirectionID, distance)
+				} else if vehicleProximityCount[vehicleID] > 2 {
+					// Already reported arrival, keep count high to avoid duplicate reports
+					// Count will reset when vehicle leaves 20m radius
 				}
 			} else {
 				// Not within 20m --> GPS spike.  - reset count
@@ -418,4 +507,10 @@ func actualArrivalMoment(routeName string) {
 
 		<-ticker.C
 	}
+}
+
+func main() {
+	fmt.Println("Starting MBTA Green Line B actual arrival tracking...")
+	fmt.Println("Monitoring vehicles every 30 seconds...")
+	actualArrivalMoment("Green-B")
 }

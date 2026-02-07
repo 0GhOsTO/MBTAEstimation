@@ -19,15 +19,6 @@ import (
 // grab the API key.
 var key string
 
-// PREDICTION Hashmap for saving which train arrives where at what time.
-var trainInfo = make(map[string][]PredictionData)
-
-// Temporary storage for predictions before determining next stop
-var tempTrainInfo = make(map[string][]PredictionData)
-
-// Final storage for each train's next stop prediction
-var trainNextStop = make(map[string][]PredictionData)
-
 // Struct to hold prediction data
 // 1. observation time
 // 2. stop ID
