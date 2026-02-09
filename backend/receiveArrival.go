@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,6 +30,9 @@ var stopToParentStation = make(map[string]string)
 
 // track consecutive detections within 20m for each vehicle
 var vehicleProximityCount = make(map[string]int)
+
+// track if vehicle was within 20m on the last poll (for strict consecutive detection)
+var vehicleLastPollWithin20m = make(map[string]bool)
 
 var stationGeoLocation = map[string][2]float64{
 	"70106": {42.34018, -71.16709}, // Boston College
@@ -49,24 +53,147 @@ var stationGeoLocation = map[string][2]float64{
 	"70159": {42.34882, -71.09564}, // Kenmore
 }
 
-// Static mapping of platform IDs to parent station (place) IDs for Green Line B
+// Static mapping of platform IDs to parent station (place) IDs for Green Line
 var staticStopToParentStation = map[string]string{
-	"70106": "place-brico", // Boston College
+	// Green Line B - Boston College
+	"70106": "place-lake",  // Boston College
+	"70107": "place-lake",  // Boston College - Exit Only
 	"70110": "place-sougr", // South Street
-	"70112": "place-chstl", // Chestnut Hill Ave
-	"70113": "place-chswk", // Chiswick Road
-	"70114": "place-sthld", // Sutherland Road
-	"70117": "place-wascm", // Washington Street
-	"70121": "place-wrnst", // Warren Street
-	"70130": "place-alsgr", // Allston Street
-	"70134": "place-grigg", // Griggs Street
-	"70144": "place-harvd", // Harvard Avenue
-	"70146": "place-pakrd", // Packards Corner
-	"70153": "place-plsgr", // Pleasant Street
-	"70154": "place-stpul", // St. Paul Street
-	"70155": "place-kntst", // Kent Street
-	"70157": "place-bland", // Blandford Street
-	"70159": "place-kencl", // Kenmore
+	"70111": "place-sougr", // South Street
+	"70112": "place-chill", // Chestnut Hill Avenue
+	"70113": "place-chill", // Chestnut Hill Avenue
+	"70114": "place-chswk", // Chiswick Road
+	"70115": "place-chswk", // Chiswick Road
+	"70116": "place-sthld", // Sutherland Road
+	"70117": "place-sthld", // Sutherland Road
+	"70120": "place-wascm", // Washington Street
+	"70121": "place-wascm", // Washington Street
+	"70124": "place-wrnst", // Warren Street
+	"70125": "place-wrnst", // Warren Street
+	"70126": "place-alsgr", // Allston Street
+	"70127": "place-alsgr", // Allston Street
+	"70128": "place-grigg", // Griggs Street
+	"70129": "place-grigg", // Griggs Street
+	"70130": "place-harvd", // Harvard Avenue
+	"70131": "place-harvd", // Harvard Avenue
+	"70134": "place-brico", // Packards Corner
+	"70135": "place-brico", // Packards Corner
+	// Note: Stops 70136-70143 have no parent station in MBTA API
+	// They map to themselves as they are orphaned platforms
+	"70136": "70136",       // Babcock Street
+	"70137": "70137",       // Babcock Street
+	"70138": "70138",       // Pleasant Street
+	"70139": "70139",       // Pleasant Street
+	"70140": "70140",       // Saint Paul Street (B)
+	"70141": "70141",       // Saint Paul Street (B)
+	"70142": "70142",       // Boston University West
+	"70143": "70143",       // Boston University West
+	"70144": "place-bucen", // Boston University Central
+	"70145": "place-bucen", // Boston University Central
+	"70146": "place-buest", // Boston University East
+	"70147": "place-buest", // Boston University East
+	"70148": "place-bland", // Blandford Street
+	"70149": "place-bland", // Blandford Street
+	"70150": "place-kencl", // Kenmore
+	"70151": "place-kencl", // Kenmore (C/D)
+	"70152": "place-hymnl", // Hynes Convention Center
+	"70153": "place-hymnl", // Hynes Convention Center
+	"70154": "place-coecl", // Copley
+	"70155": "place-coecl", // Copley
+	"70156": "place-armnl", // Arlington
+	"70157": "place-armnl", // Arlington
+	"70158": "place-boyls", // Boylston
+	"70159": "place-boyls", // Boylston
+	"70160": "place-river", // Riverside
+	"70161": "place-river", // Riverside - Exit Only
+	"70162": "place-woodl", // Woodland
+	"70163": "place-woodl", // Woodland
+	"70164": "place-waban", // Waban
+	"70165": "place-waban", // Waban
+	"70166": "place-eliot", // Eliot
+	"70167": "place-eliot", // Eliot
+	"70168": "place-newtn", // Newton Highlands
+	"70169": "place-newtn", // Newton Highlands
+	"70170": "place-newto", // Newton Centre
+	"70171": "place-newto", // Newton Centre
+	"70172": "place-chhil", // Chestnut Hill (D)
+	"70173": "place-chhil", // Chestnut Hill (D)
+	"70174": "place-rsmnl", // Reservoir
+	"70175": "place-rsmnl", // Reservoir
+	"70176": "place-bcnfd", // Beaconsfield
+	"70177": "place-bcnfd", // Beaconsfield
+	"70178": "place-brkhl", // Brookline Hills
+	"70179": "place-brkhl", // Brookline Hills
+	"70180": "place-bvmnl", // Brookline Village
+	"70181": "place-bvmnl", // Brookline Village
+	"70182": "place-longw", // Longwood (D)
+	"70183": "place-longw", // Longwood (D)
+	"70186": "place-fenwy", // Fenway
+	"70187": "place-fenwy", // Fenway
+	"70196": "place-pktrm", // Park Street (B)
+	"70197": "place-pktrm", // Park Street (C)
+	"70198": "place-pktrm", // Park Street (D)
+	"70199": "place-pktrm", // Park Street (E)
+	"70200": "place-pktrm", // Park Street
+	"70201": "place-gover", // Government Center
+	"70202": "place-gover", // Government Center
+	"70203": "place-haecl", // Haymarket
+	"70204": "place-haecl", // Haymarket
+	"70205": "place-north", // North Station
+	"70206": "place-north", // North Station
+	"70207": "place-spmnl", // Science Park/West End
+	"70208": "place-spmnl", // Science Park/West End
+	"70209": "70209",       // Lechmere - Exit Only (no parent in API)
+	"70210": "70210",       // Lechmere (no parent in API)
+	"70211": "place-smary", // Saint Marys Street
+	"70212": "place-smary", // Saint Marys Street
+	"70213": "place-hwsst", // Hawes Street
+	"70214": "place-hwsst", // Hawes Street
+	"70215": "place-kntst", // Kent Street
+	"70216": "place-kntst", // Kent Street
+	"70217": "place-stpul", // Saint Paul Street (C)
+	"70218": "place-stpul", // Saint Paul Street (C)
+	"70219": "place-cool",  // Coolidge Corner
+	"70220": "place-cool",  // Coolidge Corner
+	"70223": "place-sumav", // Summit Avenue
+	"70224": "place-sumav", // Summit Avenue
+	"70225": "place-bndhl", // Brandon Hall
+	"70226": "place-bndhl", // Brandon Hall
+	"70227": "place-fbkst", // Fairbanks Street
+	"70228": "place-fbkst", // Fairbanks Street
+	"70229": "place-bcnwa", // Washington Square
+	"70230": "place-bcnwa", // Washington Square
+	"70231": "place-tapst", // Tappan Street
+	"70232": "place-tapst", // Tappan Street
+	"70233": "place-denrd", // Dean Road
+	"70234": "place-denrd", // Dean Road
+	"70235": "place-engav", // Englewood Avenue
+	"70236": "place-engav", // Englewood Avenue
+	"70237": "place-clmnl", // Cleveland Circle - Exit Only
+	"70238": "place-clmnl", // Cleveland Circle
+	"70239": "place-prmnl", // Prudential
+	"70240": "place-prmnl", // Prudential
+	"70241": "place-symcl", // Symphony
+	"70242": "place-symcl", // Symphony
+	"70243": "place-nuniv", // Northeastern University
+	"70244": "place-nuniv", // Northeastern University
+	"70245": "place-mfa",   // Museum of Fine Arts
+	"70246": "place-mfa",   // Museum of Fine Arts
+	"70247": "place-lngmd", // Longwood Medical Area
+	"70248": "place-lngmd", // Longwood Medical Area
+	"70249": "place-brmnl", // Brigham Circle
+	"70250": "place-brmnl", // Brigham Circle
+	"70251": "place-fenwd", // Fenwood Road
+	"70252": "place-fenwd", // Fenwood Road
+	"70253": "place-mispk", // Mission Park
+	"70254": "place-mispk", // Mission Park
+	"70255": "place-rvrwy", // Riverway
+	"70256": "place-rvrwy", // Riverway
+	"70257": "place-bckhl", // Back of the Hill
+	"70258": "place-bckhl", // Back of the Hill
+	"71150": "place-kencl", // Kenmore
+	"71151": "place-kencl", // Kenmore
+	"71199": "place-pktrm", // Park Street - Drop-off Only
 }
 
 // NEED TO START FROM HERE =======================================
@@ -137,8 +264,10 @@ type SR struct {
 	Data struct {
 		ID         string `json:"id"`
 		Attributes struct {
-			Latitude  float64 `json:"latitude"`
-			Longitude float64 `json:"longitude"`
+			Name         string  `json:"name"`
+			Latitude     float64 `json:"latitude"`
+			Longitude    float64 `json:"longitude"`
+			LocationType int     `json:"location_type"` // 0 = stop/platform, 1 = station/parent
 		} `json:"attributes"`
 		Relationships struct {
 			ParentStation struct {
@@ -147,6 +276,17 @@ type SR struct {
 				} `json:"data"`
 			} `json:"parent_station"`
 		} `json:"relationships"`
+	} `json:"data"`
+}
+
+// StopsListResponse for searching parent stations
+type StopsListResponse struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Attributes struct {
+			Name         string `json:"name"`
+			LocationType int    `json:"location_type"`
+		} `json:"attributes"`
 	} `json:"data"`
 }
 
@@ -224,6 +364,8 @@ func actualArrivalMoment(routeName string) {
 	// Every 30 seconds ...
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	// Create HTTP client once with timeout to prevent hanging
+	client := &http.Client{Timeout: 10 * time.Second}
 	// call once right away
 	for {
 		// @TODO: NEED to handle in go routine
@@ -235,7 +377,6 @@ func actualArrivalMoment(routeName string) {
 		}
 		// Set the API key in the header.
 		req.Header.Set("x-api-key", key)
-		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
 			panic(err)
@@ -300,6 +441,7 @@ func actualArrivalMoment(routeName string) {
 				delete(actualTrainInfo, vehicleID)
 				delete(vehicleNextStop, vehicleID)
 				delete(vehicleProximityCount, vehicleID)
+				delete(vehicleLastPollWithin20m, vehicleID)
 				fmt.Printf("Cleaned up stale vehicle: %s\n", vehicleID)
 			}
 		}
@@ -451,9 +593,10 @@ func actualArrivalMoment(routeName string) {
 		for vehicleID, actualData := range vehicleSnapshot {
 			nextStopID, hasNextStop := nextStopSnapshot[vehicleID]
 			if !hasNextStop {
-				// No next stop - reset proximity count
+				// No next stop - reset proximity count and last poll state
 				mapMutex.Lock()
 				delete(vehicleProximityCount, vehicleID)
+				delete(vehicleLastPollWithin20m, vehicleID)
 				mapMutex.Unlock()
 
 				continue
@@ -473,33 +616,44 @@ func actualArrivalMoment(routeName string) {
 			)
 
 			mapMutex.Lock()
-			if distance <= 20.0 {
-				// Within 20m - increment count
-				vehicleProximityCount[vehicleID]++
+			// Check if vehicle was within 20m on last poll
+			lastPollWithin := vehicleLastPollWithin20m[vehicleID]
+			currentPollWithin := distance <= 20.0
 
-				if vehicleProximityCount[vehicleID] == 2 {
-					// Detected 2 consecutive times within 20m - vehicle is arriving
-					// WILL BE IN FORM OF RETURN
-					// Get parent station (place ID) for output
-					placeID := staticStopToParentStation[nextStopID]
-					if placeID == "" {
-						// Check dynamic mapping if not in static
-						mapMutex.RLock()
-						placeID = stopToParentStation[nextStopID]
-						mapMutex.RUnlock()
+			if currentPollWithin {
+				// Within 20m on current poll
+				if lastPollWithin {
+					// Within 20m on BOTH last poll and current poll - strict consecutive detection
+					vehicleProximityCount[vehicleID]++
+
+					if vehicleProximityCount[vehicleID] == 2 {
+						// Detected 2 consecutive times within 20m - vehicle is arriving
+						// WILL BE IN FORM OF RETURN
+						// Get parent station (place ID) for output
+						placeID := staticStopToParentStation[nextStopID]
+						if placeID == "" {
+							// Check dynamic mapping if not in static (already holding write lock)
+							placeID = stopToParentStation[nextStopID]
+						}
+						if placeID == "" {
+							placeID = nextStopID // Fallback to stop ID if parent not found
+						}
+						fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
+							placeID, vehicleID, actualData.ObservationTime.Format(time.RFC3339), actualData.DirectionID, distance)
+					} else if vehicleProximityCount[vehicleID] > 2 {
+						// Already reported arrival, keep count high to avoid duplicate reports
+						// Count will reset when vehicle leaves 20m radius
 					}
-					if placeID == "" {
-						placeID = nextStopID // Fallback to stop ID if parent not found
-					}
-					fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
-						placeID, vehicleID, actualData.ObservationTime.Format(time.RFC3339), actualData.DirectionID, distance)
-				} else if vehicleProximityCount[vehicleID] > 2 {
-					// Already reported arrival, keep count high to avoid duplicate reports
-					// Count will reset when vehicle leaves 20m radius
+				} else {
+					// First time within 20m (or just returned to 20m radius)
+					vehicleProximityCount[vehicleID] = 1
 				}
+				// Update state for next poll
+				vehicleLastPollWithin20m[vehicleID] = true
 			} else {
-				// Not within 20m --> GPS spike.  - reset count
+				// Not within 20m - reset everything
 				vehicleProximityCount[vehicleID] = 0
+				vehicleLastPollWithin20m[vehicleID] = false
 			}
 			mapMutex.Unlock()
 
@@ -509,7 +663,135 @@ func actualArrivalMoment(routeName string) {
 	}
 }
 
+// findParentStationByName searches for a parent station (location_type=1) with a matching name
+func findParentStationByName(stopName string, client *http.Client) (string, error) {
+	// Search for stations on Green Line with matching name
+	url := fmt.Sprintf("https://api-v3.mbta.com/stops?filter[route]=Green-B,Green-C,Green-D,Green-E&filter[location_type]=1")
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("x-api-key", key)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var stopsResponse StopsListResponse
+	if err := json.Unmarshal(body, &stopsResponse); err != nil {
+		return "", err
+	}
+
+	// Look for exact match or close match
+	stopNameLower := strings.ToLower(stopName)
+	for _, stop := range stopsResponse.Data {
+		if strings.ToLower(stop.Attributes.Name) == stopNameLower {
+			return stop.ID, nil
+		}
+	}
+
+	return "not-found", nil
+}
+
+// verifyStaticStopMappings checks all staticStopToParentStation mappings against the MBTA API
+func verifyStaticStopMappings() {
+	fmt.Println("=== Verifying staticStopToParentStation mappings ===")
+	fmt.Printf("Total stops to verify: %d\n\n", len(staticStopToParentStation))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	correctCount := 0
+	incorrectCount := 0
+	errorCount := 0
+
+	for stopID, expectedParent := range staticStopToParentStation {
+		// Make API call to get stop info
+		url := fmt.Sprintf("https://api-v3.mbta.com/stops/%s", stopID)
+		req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+		if err != nil {
+			fmt.Printf("❌ Error creating request for stop %s: %v\n", stopID, err)
+			errorCount++
+			continue
+		}
+		req.Header.Set("x-api-key", key)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Printf("❌ Error fetching stop %s: %v\n", stopID, err)
+			errorCount++
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			fmt.Printf("❌ Error reading response for stop %s: %v\n", stopID, err)
+			errorCount++
+			continue
+		}
+
+		var stopResponse SR
+		if err := json.Unmarshal(body, &stopResponse); err != nil {
+			fmt.Printf("❌ Error parsing JSON for stop %s: %v\n", stopID, err)
+			errorCount++
+			continue
+		}
+
+		// Get actual parent station from API
+		var actualParent string
+		locationType := stopResponse.Data.Attributes.LocationType
+		stopName := stopResponse.Data.Attributes.Name
+
+		if stopResponse.Data.Relationships.ParentStation.Data != nil {
+			actualParent = stopResponse.Data.Relationships.ParentStation.Data.ID
+		} else {
+			// No parent station - stop maps to itself
+			if locationType == 1 {
+				// This is a parent station, so it should map to itself
+				actualParent = stopID
+			} else {
+				// Orphaned platform - maps to itself
+				fmt.Printf("⚠️  Stop %s ('%s') has no parent, mapping to itself\n", stopID, stopName)
+				actualParent = stopID
+			}
+		}
+
+		// Compare
+		if actualParent == expectedParent {
+			correctCount++
+			fmt.Printf("✓ Stop %s: %s (correct, location_type=%d)\n", stopID, expectedParent, locationType)
+		} else {
+			incorrectCount++
+			fmt.Printf("✗ Stop %s: Expected '%s', Got '%s' (MISMATCH, location_type=%d)\n", stopID, expectedParent, actualParent, locationType)
+		}
+
+		// Small delay to avoid rate limiting
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	fmt.Println("\n=== Verification Summary ===")
+	fmt.Printf("✓ Correct: %d\n", correctCount)
+	fmt.Printf("✗ Incorrect: %d\n", incorrectCount)
+	fmt.Printf("❌ Errors: %d\n", errorCount)
+	fmt.Printf("Total: %d\n", len(staticStopToParentStation))
+
+	if incorrectCount > 0 {
+		fmt.Println("\n⚠️  WARNING: Some mappings are incorrect!")
+	} else if errorCount == 0 {
+		fmt.Println("\n✓ All mappings verified successfully!")
+	}
+}
+
 func main() {
+	// Uncomment below to verify staticStopToParentStation mappings
+	// verifyStaticStopMappings()
+
 	fmt.Println("Starting MBTA Green Line B actual arrival tracking...")
 	fmt.Println("Monitoring vehicles every 30 seconds...")
 	actualArrivalMoment("Green-B")
