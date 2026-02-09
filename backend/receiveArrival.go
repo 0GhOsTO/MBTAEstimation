@@ -373,18 +373,25 @@ func actualArrivalMoment(routeName string) {
 		url := fmt.Sprintf("https://api-v3.mbta.com/vehicles?filter[route]=%s", routeName)
 		req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 		if err != nil {
-			panic(err)
+			fmt.Printf("Error creating request: %v\n", err)
+			<-ticker.C
+			continue
 		}
 		// Set the API key in the header.
 		req.Header.Set("x-api-key", key)
 		resp, err := client.Do(req)
 		if err != nil {
-			panic(err)
+			fmt.Printf("Error fetching vehicles: %v\n", err)
+			<-ticker.C
+			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			panic(err)
+			fmt.Printf("Error reading response body: %v\n", err)
+			resp.Body.Close()
+			<-ticker.C
+			continue
 		}
 		resp.Body.Close()
 
@@ -398,6 +405,7 @@ func actualArrivalMoment(routeName string) {
 		err = json.Unmarshal(body, &vehiclesResp)
 		if err != nil {
 			fmt.Printf("Error parsing JSON: %v\n", err)
+			<-ticker.C
 			continue
 		}
 
