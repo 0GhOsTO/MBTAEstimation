@@ -795,12 +795,3 @@ func verifyStaticStopMappings() {
 		fmt.Println("\n✓ All mappings verified successfully!")
 	}
 }
-
-func main() {
-	// Uncomment below to verify staticStopToParentStation mappings
-	// verifyStaticStopMappings()
-
-	fmt.Println("Starting MBTA Green Line B actual arrival tracking...")
-	fmt.Println("Monitoring vehicles every 30 seconds...")
-	actualArrivalMoment("Green-B")
-}

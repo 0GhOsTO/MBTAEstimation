@@ -193,3 +193,13 @@ func main_test_pred() {
 		fmt.Println()
 	}
 }
+
+func main() {
+	// 1. Every 3 minutes...
+	ticker := time.NewTicker(180 * time.Second)
+	defer ticker.Stop()
+	for {
+		<-ticker.C
+
+	}
+}
