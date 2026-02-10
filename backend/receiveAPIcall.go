@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -18,6 +19,12 @@ import (
 
 // grab the API key.
 var key string
+
+// stop id: {in/outbound : {vehicle id: prediction data}}}
+var predictionDataMap = make(map[string]map[int]map[string][]PredictionData)
+
+// mutex for protecting prediction map from concurrent access
+var predictionMutex sync.RWMutex
 
 // Struct to hold prediction data
 // 1. observation time
@@ -146,6 +153,19 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 	// Extract vehicle ID of the second prediction
 	vehicle := res.VehicleID
 
+	// Store the prediction data in the map.
+	predictionMutex.Lock()
+	if predictionDataMap[stopID] == nil {
+		predictionDataMap[stopID] = make(map[int]map[string][]PredictionData)
+	}
+	if predictionDataMap[stopID][direction] == nil {
+		predictionDataMap[stopID][direction] = make(map[string][]PredictionData)
+	}
+	predictionDataMap[stopID][direction][vehicle] = append(predictionDataMap[stopID][direction][vehicle], res)
+	predictionMutex.Unlock()
+
+	fmt.Printf("Stored prediction: Stop %s, Dir %d, Vehicle %s (Arrival: %v)\n", stopID, direction, vehicle, res.ArrivalTime)
+
 	return res, vehicle, nil
 }
 
@@ -195,11 +215,16 @@ func main_test_pred() {
 }
 
 func main() {
-	// 1. Every 3 minutes...
+	// 1. Every 3 minutes...fetch the prediction
 	ticker := time.NewTicker(180 * time.Second)
 	defer ticker.Stop()
 	for {
 		<-ticker.C
-
+		for _, id := range parentStationIDs {
+			go func(stopID string) {
+				fetchPrediction_single(stopID, 0)
+				fetchPrediction_single(stopID, 1)
+			}(id)
+		}
 	}
 }

@@ -196,6 +196,80 @@ var staticStopToParentStation = map[string]string{
 	"71199": "place-pktrm", // Park Street - Drop-off Only
 }
 
+// List of unique parent station IDs (place-* IDs) from staticStopToParentStation
+var parentStationIDs = []string{
+	"place-alsgr", // Allston Street
+	"place-armnl", // Arlington
+	"place-bcnfd", // Beaconsfield
+	"place-bcnwa", // Washington Square
+	"place-bckhl", // Back of the Hill
+	"place-bland", // Blandford Street
+	"place-bndhl", // Brandon Hall
+	"place-boyls", // Boylston
+	"place-brico", // Packards Corner
+	"place-brkhl", // Brookline Hills
+	"place-brmnl", // Brigham Circle
+	"place-bucen", // Boston University Central
+	"place-buest", // Boston University East
+	"place-bvmnl", // Brookline Village
+	"place-chhil", // Chestnut Hill (D)
+	"place-chill", // Chestnut Hill Avenue
+	"place-chswk", // Chiswick Road
+	"place-clmnl", // Cleveland Circle
+	"place-coecl", // Copley
+	"place-cool",  // Coolidge Corner
+	"place-denrd", // Dean Road
+	"place-eliot", // Eliot
+	"place-engav", // Englewood Avenue
+	"place-fbkst", // Fairbanks Street
+	"place-fenwd", // Fenwood Road
+	"place-fenwy", // Fenway
+	"place-gover", // Government Center
+	"place-grigg", // Griggs Street
+	"place-haecl", // Haymarket
+	"place-harvd", // Harvard Avenue
+	"place-hwsst", // Hawes Street
+	"place-hymnl", // Hynes Convention Center
+	"place-kencl", // Kenmore
+	"place-kntst", // Kent Street
+	"place-lake",  // Boston College
+	"place-lngmd", // Longwood Medical Area
+	"place-longw", // Longwood (D)
+	"place-mfa",   // Museum of Fine Arts
+	"place-mispk", // Mission Park
+	"place-newtn", // Newton Highlands
+	"place-newto", // Newton Centre
+	"place-north", // North Station
+	"place-nuniv", // Northeastern University
+	"place-pktrm", // Park Street
+	"place-prmnl", // Prudential
+	"place-river", // Riverside
+	"place-rsmnl", // Reservoir
+	"place-rvrwy", // Riverway
+	"place-smary", // Saint Marys Street
+	"place-sougr", // South Street
+	"place-spmnl", // Science Park/West End
+	"place-stpul", // Saint Paul Street (C)
+	"place-sthld", // Sutherland Road
+	"place-sumav", // Summit Avenue
+	"place-symcl", // Symphony
+	"place-tapst", // Tappan Street
+	"place-waban", // Waban
+	"place-wascm", // Washington Street
+	"place-woodl", // Woodland
+	"place-wrnst", // Warren Street
+	"70209",
+	"70210",
+	"70136",
+	"70137",
+	"70138",
+	"70139",
+	"70140",
+	"70141",
+	"70142",
+	"70143",
+}
+
 // NEED TO START FROM HERE =======================================
 
 // mutex for protecting shared maps from race conditions
