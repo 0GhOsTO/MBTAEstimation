@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"sync"
@@ -25,6 +26,12 @@ var predictionDataMap = make(map[string]map[int]map[string][]PredictionData)
 
 // mutex for protecting prediction map from concurrent access
 var predictionMutex sync.RWMutex
+
+// Prediction accuracy statistics
+var totalPredictions int
+var correctPredictions int
+var incorrectPredictions int
+var statsMutex sync.Mutex
 
 // Struct to hold prediction data
 // 1. observation time
@@ -215,15 +222,105 @@ func main_test_pred() {
 }
 
 func main() {
+	// Start goroutine to constantly listen for arrivals
+	go func() {
+		fmt.Println("Started listening to ArrivalChannel...")
+		// this is equivalent to <-Arrival Channel.
+		for arrival := range ArrivalChannel {
+			fmt.Printf("\n=== TRAIN ARRIVAL DETECTED ===\n")
+			fmt.Printf("Station (Place ID): %s\n", arrival.StationPlaceID)
+			fmt.Printf("Station (Stop ID): %s\n", arrival.StationStopID)
+			fmt.Printf("Train ID: %s\n", arrival.TrainID)
+			fmt.Printf("Direction: %d\n", arrival.Direction)
+			fmt.Printf("Actual Arrival Time: %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+			fmt.Printf("==============================\n\n")
+
+			// Compare with prediction data and score accuracy
+			predictionMutex.RLock()
+			if predictions, exists := predictionDataMap[arrival.StationStopID][arrival.Direction][arrival.TrainID]; exists {
+				fmt.Printf("Found %d prediction(s) for this train:\n", len(predictions))
+
+				for i, pred := range predictions {
+					if pred.ArrivalTime != nil {
+						// Calculate difference between predicted and actual
+						difference := arrival.ArrivalTime.Sub(*pred.ArrivalTime)
+						diffSeconds := difference.Seconds()
+						diffMinutes := difference.Minutes()
+
+						fmt.Printf("\nPrediction #%d:\n", i+1)
+						fmt.Printf("  Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+						fmt.Printf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+						fmt.Printf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
+
+						// Score the prediction (smaller difference = better score)
+						absMinutes := math.Abs(diffMinutes)
+						var score string
+						var isCorrect bool
+
+						// Define "correct" as within 3 minutes of actual arrival
+						if absMinutes <= 3 {
+							isCorrect = true
+							if absMinutes <= 1 {
+								score = "EXCELLENT (CORRECT)"
+							} else {
+								score = "GOOD (CORRECT)"
+							}
+						} else {
+							isCorrect = false
+							if absMinutes <= 5 {
+								score = "FAIR (WRONG)"
+							} else {
+								score = "POOR (WRONG)"
+							}
+						}
+
+						if diffSeconds > 0 {
+							fmt.Printf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
+						} else if diffSeconds < 0 {
+							fmt.Printf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
+						} else {
+							fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
+						}
+						fmt.Printf("  Accuracy Score:    %s\n", score)
+
+						// Update statistics
+						statsMutex.Lock()
+						totalPredictions++
+						if isCorrect {
+							correctPredictions++
+						} else {
+							incorrectPredictions++
+						}
+						accuracy := float64(correctPredictions) / float64(totalPredictions) * 100
+						fmt.Printf("\n📊 OVERALL STATISTICS:\n")
+						fmt.Printf("   Total Predictions: %d\n", totalPredictions)
+						fmt.Printf("   Correct (≤3 min): %d\n", correctPredictions)
+						fmt.Printf("   Wrong (>3 min):   %d\n", incorrectPredictions)
+						fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
+						statsMutex.Unlock()
+					} else {
+						fmt.Printf("\nPrediction #%d: No predicted arrival time available\n", i+1)
+					}
+				}
+			} else {
+				fmt.Println("No predictions found for this train arrival")
+			}
+			predictionMutex.RUnlock()
+
+			fmt.Println("\n==============================\n")
+		}
+	}()
+
 	// 1. Every 3 minutes...fetch the prediction
 	ticker := time.NewTicker(180 * time.Second)
 	defer ticker.Stop()
 	for {
 		<-ticker.C
 		for _, id := range parentStationIDs {
+			// fetch the prediction for both directions in parallel.
 			go func(stopID string) {
-				fetchPrediction_single(stopID, 0)
-				fetchPrediction_single(stopID, 1)
+				go fetchPrediction_single(stopID, 0)
+				go fetchPrediction_single(stopID, 1)
 			}(id)
 		}
 	}

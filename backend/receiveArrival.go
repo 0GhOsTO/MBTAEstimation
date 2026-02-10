@@ -22,6 +22,18 @@ var actualTrainInfo = make(map[string]ActualData)
 // save the next stop information for each vehicle
 var vehicleNextStop = make(map[string]string)
 
+// ArrivalInfo holds information about a train arrival
+type ArrivalInfo struct {
+	StationPlaceID string    // Station ID (e.g., "place-lake")
+	StationStopID  string    // Stop ID (e.g., "70106")
+	TrainID        string    // Vehicle/Train ID
+	Direction      int       // Direction ID (0 or 1)
+	ArrivalTime    time.Time // Time of arrival
+}
+
+// Channel to send arrival notifications
+var ArrivalChannel = make(chan ArrivalInfo, 1000)
+
 // dynamically store stop geolocations fetched from the API
 var dynamicStopGeoLocation = make(map[string][2]float64)
 
@@ -722,6 +734,23 @@ func actualArrivalMoment(routeName string) {
 						}
 						fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
 							placeID, vehicleID, actualData.ObservationTime.Format(time.RFC3339), actualData.DirectionID, distance)
+
+						// Send arrival information to channel
+						arrivalInfo := ArrivalInfo{
+							StationPlaceID: placeID,
+							StationStopID:  nextStopID,
+							TrainID:        vehicleID,
+							Direction:      actualData.DirectionID,
+							ArrivalTime:    actualData.ObservationTime,
+						}
+
+						// Non-blocking send to avoid deadlock if no receiver
+						select {
+						case ArrivalChannel <- arrivalInfo:
+							fmt.Printf("Sent arrival info to channel: %+v\n", arrivalInfo)
+						default:
+							fmt.Println("Warning: Arrival channel full, dropping message")
+						}
 					} else if vehicleProximityCount[vehicleID] > 2 {
 						// Already reported arrival, keep count high to avoid duplicate reports
 						// Count will reset when vehicle leaves 20m radius
