@@ -94,7 +94,8 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
 
 function App() {
   const [selectedLine, setSelectedLine] = useState('Green-B')
-  const [trustworthiness, setTrustworthiness] = useState(85)
+  const [inboundAccuracy, setInboundAccuracy] = useState(85)
+  const [outboundAccuracy, setOutboundAccuracy] = useState(78)
   const [selectedStation, setSelectedStation] = useState("Park Street")
   const [logs, setLogs] = useState<LogEntry[]>([
     {
@@ -117,7 +118,9 @@ function App() {
 
   const handleStationSelect = (station: string) => {
     setSelectedStation(station)
-    setTrustworthiness(Math.floor(Math.random() * 100)) // Random percentage for demo
+    // Random percentages for demo - replace with actual data from backend
+    setInboundAccuracy(Math.floor(Math.random() * 100))
+    setOutboundAccuracy(Math.floor(Math.random() * 100))
     addLog(`Station selected: ${station}`)
   }
 
@@ -131,10 +134,20 @@ function App() {
       <div className="left-panel">
         <div className="trustworthiness-display">
           <h1 className="station-name">{selectedStation}</h1>
-          <div className="percentage-circle">
-            <span className="percentage-number">{trustworthiness}%</span>
+          <div className="accuracy-circles-container">
+            <div className="accuracy-item">
+              <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : 'poor'}`}>
+                <span className="percentage-number">{inboundAccuracy}%</span>
+              </div>
+              <p className="accuracy-label">Inbound</p>
+            </div>
+            <div className="accuracy-item">
+              <div className={`percentage-circle ${outboundAccuracy >= 50 ? 'good' : 'poor'}`}>
+                <span className="percentage-number">{outboundAccuracy}%</span>
+              </div>
+              <p className="accuracy-label">Outbound</p>
+            </div>
           </div>
-          <p className="trustworthiness-label">Trustworthiness</p>
         </div>
       </div>
       

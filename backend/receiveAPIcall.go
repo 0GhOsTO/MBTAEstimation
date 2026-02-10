@@ -27,10 +27,16 @@ var predictionDataMap = make(map[string]map[int]map[string][]PredictionData)
 // mutex for protecting prediction map from concurrent access
 var predictionMutex sync.RWMutex
 
-// Prediction accuracy statistics
-var totalPredictions int
-var correctPredictions int
-var incorrectPredictions int
+// StationStats holds accuracy statistics for a station and direction
+type StationStats struct {
+	Total     int
+	Correct   int
+	Incorrect int
+}
+
+// Prediction accuracy statistics by station and direction
+// Map structure: stationID -> direction (0=outbound, 1=inbound) -> stats
+var stationAccuracyMap = make(map[string]map[int]*StationStats)
 var statsMutex sync.Mutex
 
 // Struct to hold prediction data
@@ -283,19 +289,35 @@ func main() {
 						}
 						fmt.Printf("  Accuracy Score:    %s\n", score)
 
-						// Update statistics
+						// Update statistics per station and direction
 						statsMutex.Lock()
-						totalPredictions++
-						if isCorrect {
-							correctPredictions++
-						} else {
-							incorrectPredictions++
+						// Initialize station map if needed
+						if stationAccuracyMap[arrival.StationPlaceID] == nil {
+							stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
 						}
-						accuracy := float64(correctPredictions) / float64(totalPredictions) * 100
-						fmt.Printf("\n📊 OVERALL STATISTICS:\n")
-						fmt.Printf("   Total Predictions: %d\n", totalPredictions)
-						fmt.Printf("   Correct (≤3 min): %d\n", correctPredictions)
-						fmt.Printf("   Wrong (>3 min):   %d\n", incorrectPredictions)
+						// Initialize direction stats if needed
+						if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
+							stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
+						}
+
+						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+						stats.Total++
+						if isCorrect {
+							stats.Correct++
+						} else {
+							stats.Incorrect++
+						}
+
+						accuracy := float64(stats.Correct) / float64(stats.Total) * 100
+						directionName := "Outbound"
+						if arrival.Direction == 1 {
+							directionName = "Inbound"
+						}
+
+						fmt.Printf("\n📊 STATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
+						fmt.Printf("   Total Predictions: %d\n", stats.Total)
+						fmt.Printf("   Correct (≤3 min): %d\n", stats.Correct)
+						fmt.Printf("   Wrong (>3 min):   %d\n", stats.Incorrect)
 						fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
 						statsMutex.Unlock()
 					} else {

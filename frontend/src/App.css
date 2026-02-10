@@ -37,31 +37,65 @@
   text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
+/* Container for both accuracy circles */
+.accuracy-circles-container {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.accuracy-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
 .percentage-circle {
-  width: 350px;
-  height: 350px;
-  border: 10px solid rgba(34, 197, 94, 0.8);
+  width: 200px;
+  height: 200px;
+  border: 8px solid rgba(34, 197, 94, 0.8);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 2rem;
   background: rgba(34, 197, 94, 0.1);
   backdrop-filter: blur(15px);
   box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
+  transition: all 0.3s ease;
+}
+
+.percentage-circle.good {
+  border-color: rgba(34, 197, 94, 0.8);
+  background: rgba(34, 197, 94, 0.1);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
+}
+
+.percentage-circle.poor {
+  border-color: rgba(239, 68, 68, 0.8);
+  background: rgba(239, 68, 68, 0.1);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+}
+
+.percentage-circle:hover {
+  transform: scale(1.05);
 }
 
 .percentage-number {
-  font-size: 6rem;
+  font-size: 3.5rem;
   font-weight: 700;
   text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
-.trustworthiness-label {
-  font-size: 1.8rem;
-  font-weight: 300;
+.accuracy-label {
+  font-size: 1.3rem;
+  font-weight: 400;
   margin: 0;
   opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 /* Right Panel - Map and Logs */
