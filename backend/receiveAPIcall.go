@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"sync"
@@ -191,10 +190,10 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 func cleanupOldPredictions() {
 	predictionMutex.Lock()
 	defer predictionMutex.Unlock()
-	
+
 	cutoffTime := time.Now().Add(-30 * time.Minute)
 	cleanedCount := 0
-	
+
 	for stopID, directions := range predictionDataMap {
 		for direction, vehicles := range directions {
 			for vehicleID, predictions := range vehicles {
@@ -207,7 +206,7 @@ func cleanupOldPredictions() {
 						cleanedCount++
 					}
 				}
-				
+
 				if len(validPredictions) > 0 {
 					predictionDataMap[stopID][direction][vehicleID] = validPredictions
 				} else {
@@ -224,7 +223,7 @@ func cleanupOldPredictions() {
 			delete(predictionDataMap, stopID)
 		}
 	}
-	
+
 	if cleanedCount > 0 {
 		fmt.Printf("🧹 Cleaned up %d old predictions (older than 30 minutes)\n", cleanedCount)
 	}
@@ -278,158 +277,158 @@ func main_test_pred() {
 func main() {
 	// Start periodic cleanup of old predictions (every 5 minutes)
 	go func() {
-		cleanupTicker := time.NewTicker(5 * time.Minute)
+		cleanupTicker := time.NewTicker(30 * time.Minute)
 		defer cleanupTicker.Stop()
-		fmt.Println("Started periodic prediction cleanup (every 5 minutes)...")
+		fmt.Println("Started periodic prediction cleanup (every 30 minutes)...")
 		for {
 			<-cleanupTicker.C
 			cleanupOldPredictions()
 		}
 	}()
-	
+
 	// Start goroutine to monitor actual train arrivals
 	go actualArrivalMoment("Green-B")
 	fmt.Println("Started monitoring Green-B line for arrivals...")
-	
+
 	// Start goroutine to constantly listen for arrivals
-	go func() {
-		fmt.Println("Started listening to ArrivalChannel...")
-		// this is equivalent to <-Arrival Channel.
-		for arrival := range ArrivalChannel {
-			fmt.Printf("\n=== TRAIN ARRIVAL DETECTED ===\n")
-			fmt.Printf("Station (Place ID): %s\n", arrival.StationPlaceID)
-			fmt.Printf("Station (Stop ID): %s\n", arrival.StationStopID)
-			fmt.Printf("Train ID: %s\n", arrival.TrainID)
-			fmt.Printf("Direction: %d\n", arrival.Direction)
-			fmt.Printf("Actual Arrival Time: %s\n", arrival.ArrivalTime.Format(time.RFC3339))
-			fmt.Printf("==============================\n\n")
+	// go func() {
+	// 	fmt.Println("Started listening to ArrivalChannel...")
+	// 	// this is equivalent to <-Arrival Channel.
+	// 	for arrival := range ArrivalChannel {
+	// 		fmt.Printf("\n=== TRAIN ARRIVAL DETECTED ===\n")
+	// 		fmt.Printf("Station (Place ID): %s\n", arrival.StationPlaceID)
+	// 		fmt.Printf("Station (Stop ID): %s\n", arrival.StationStopID)
+	// 		fmt.Printf("Train ID: %s\n", arrival.TrainID)
+	// 		fmt.Printf("Direction: %d\n", arrival.Direction)
+	// 		fmt.Printf("Actual Arrival Time: %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+	// 		fmt.Printf("==============================\n\n")
 
-			// Compare with prediction data and score accuracy
-			predictionMutex.RLock()
-			if predictions, exists := predictionDataMap[arrival.StationStopID][arrival.Direction][arrival.TrainID]; exists {
-				fmt.Printf("Found %d prediction(s) for this train:\n", len(predictions))
+	// 		// Compare with prediction data and score accuracy
+	// 		predictionMutex.RLock()
+	// 		if predictions, exists := predictionDataMap[arrival.StationStopID][arrival.Direction][arrival.TrainID]; exists {
+	// 			fmt.Printf("Found %d prediction(s) for this train:\n", len(predictions))
 
-				for i, pred := range predictions {
-					if pred.ArrivalTime != nil {
-						// Calculate difference between predicted and actual
-						difference := arrival.ArrivalTime.Sub(*pred.ArrivalTime)
-						diffSeconds := difference.Seconds()
-						diffMinutes := difference.Minutes()
+	// 			for i, pred := range predictions {
+	// 				if pred.ArrivalTime != nil {
+	// 					// Calculate difference between predicted and actual
+	// 					difference := arrival.ArrivalTime.Sub(*pred.ArrivalTime)
+	// 					diffSeconds := difference.Seconds()
+	// 					diffMinutes := difference.Minutes()
 
-						fmt.Printf("\nPrediction #%d:\n", i+1)
-						fmt.Printf("  Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-						fmt.Printf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
-						fmt.Printf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
+	// 					fmt.Printf("\nPrediction #%d:\n", i+1)
+	// 					fmt.Printf("  Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+	// 					fmt.Printf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+	// 					fmt.Printf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
 
-						// Score the prediction (smaller difference = better score)
-						absMinutes := math.Abs(diffMinutes)
-						var score string
-						var isCorrect bool
+	// 					// Score the prediction (smaller difference = better score)
+	// 					absMinutes := math.Abs(diffMinutes)
+	// 					var score string
+	// 					var isCorrect bool
 
-						// Define "correct" as within 3 minutes of actual arrival
-						if absMinutes <= 3 {
-							isCorrect = true
-							if absMinutes <= 1 {
-								score = "EXCELLENT (CORRECT)"
-							} else {
-								score = "GOOD (CORRECT)"
-							}
-						} else {
-							isCorrect = false
-							if absMinutes <= 5 {
-								score = "FAIR (WRONG)"
-							} else {
-								score = "POOR (WRONG)"
-							}
-						}
+	// 					// Define "correct" as within 3 minutes of actual arrival
+	// 					if absMinutes <= 3 {
+	// 						isCorrect = true
+	// 						if absMinutes <= 1 {
+	// 							score = "EXCELLENT (CORRECT)"
+	// 						} else {
+	// 							score = "GOOD (CORRECT)"
+	// 						}
+	// 					} else {
+	// 						isCorrect = false
+	// 						if absMinutes <= 5 {
+	// 							score = "FAIR (WRONG)"
+	// 						} else {
+	// 							score = "POOR (WRONG)"
+	// 						}
+	// 					}
 
-						if diffSeconds > 0 {
-							fmt.Printf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
-						} else if diffSeconds < 0 {
-							fmt.Printf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
-						} else {
-							fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
-						}
-						fmt.Printf("  Accuracy Score:    %s\n", score)
+	// 					if diffSeconds > 0 {
+	// 						fmt.Printf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
+	// 					} else if diffSeconds < 0 {
+	// 						fmt.Printf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
+	// 					} else {
+	// 						fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
+	// 					}
+	// 					fmt.Printf("  Accuracy Score:    %s\n", score)
 
-						// Update statistics per station and direction
-						statsMutex.Lock()
-						// Initialize station map if needed
-						if stationAccuracyMap[arrival.StationPlaceID] == nil {
-							stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
-						}
-						// Initialize direction stats if needed
-						if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
-							stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
-						}
+	// 					// Update statistics per station and direction
+	// 					statsMutex.Lock()
+	// 					// Initialize station map if needed
+	// 					if stationAccuracyMap[arrival.StationPlaceID] == nil {
+	// 						stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
+	// 					}
+	// 					// Initialize direction stats if needed
+	// 					if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
+	// 						stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
+	// 					}
 
-						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
-						stats.Total++
-						if isCorrect {
-							stats.Correct++
-						} else {
-							stats.Incorrect++
-						}
+	// 					stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+	// 					stats.Total++
+	// 					if isCorrect {
+	// 						stats.Correct++
+	// 					} else {
+	// 						stats.Incorrect++
+	// 					}
 
-						accuracy := float64(stats.Correct) / float64(stats.Total) * 100
-						directionName := "Outbound"
-						if arrival.Direction == 1 {
-							directionName = "Inbound"
-						}
+	// 					accuracy := float64(stats.Correct) / float64(stats.Total) * 100
+	// 					directionName := "Outbound"
+	// 					if arrival.Direction == 1 {
+	// 						directionName = "Inbound"
+	// 					}
 
-						fmt.Printf("\n📊 STATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
-						fmt.Printf("   Total Predictions: %d\n", stats.Total)
-						fmt.Printf("   Correct (≤3 min): %d\n", stats.Correct)
-						fmt.Printf("   Wrong (>3 min):   %d\n", stats.Incorrect)
-						fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
-						statsMutex.Unlock()
-					} else {
-						fmt.Printf("\nPrediction #%d: No predicted arrival time available\n", i+1)
-					}
-				}
-				
-				// Cleanup: Remove evaluated predictions to prevent memory leak
-				predictionMutex.RUnlock()
-				predictionMutex.Lock()
-				delete(predictionDataMap[arrival.StationStopID][arrival.Direction], arrival.TrainID)
-				if len(predictionDataMap[arrival.StationStopID][arrival.Direction]) == 0 {
-					delete(predictionDataMap[arrival.StationStopID], arrival.Direction)
-				}
-				if len(predictionDataMap[arrival.StationStopID]) == 0 {
-					delete(predictionDataMap, arrival.StationStopID)
-				}
-				predictionMutex.Unlock()
-				fmt.Printf("Cleaned up predictions for vehicle %s at stop %s\n", arrival.TrainID, arrival.StationStopID)
-			} else {
-				fmt.Println("No predictions found for this train arrival")
-				predictionMutex.RUnlock()
-			}
+	// 					fmt.Printf("\n📊 STATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
+	// 					fmt.Printf("   Total Predictions: %d\n", stats.Total)
+	// 					fmt.Printf("   Correct (≤3 min): %d\n", stats.Correct)
+	// 					fmt.Printf("   Wrong (>3 min):   %d\n", stats.Incorrect)
+	// 					fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
+	// 					statsMutex.Unlock()
+	// 				} else {
+	// 					fmt.Printf("\nPrediction #%d: No predicted arrival time available\n", i+1)
+	// 				}
+	// 			}
 
-			fmt.Println("\n==============================\n")
-		}
-	}()
+	// 			// Cleanup: Remove evaluated predictions to prevent memory leak
+	// 			predictionMutex.RUnlock()
+	// 			predictionMutex.Lock()
+	// 			delete(predictionDataMap[arrival.StationStopID][arrival.Direction], arrival.TrainID)
+	// 			if len(predictionDataMap[arrival.StationStopID][arrival.Direction]) == 0 {
+	// 				delete(predictionDataMap[arrival.StationStopID], arrival.Direction)
+	// 			}
+	// 			if len(predictionDataMap[arrival.StationStopID]) == 0 {
+	// 				delete(predictionDataMap, arrival.StationStopID)
+	// 			}
+	// 			predictionMutex.Unlock()
+	// 			fmt.Printf("Cleaned up predictions for vehicle %s at stop %s\n", arrival.TrainID, arrival.StationStopID)
+	// 		} else {
+	// 			fmt.Println("No predictions found for this train arrival")
+	// 			predictionMutex.RUnlock()
+	// 		}
 
-	// 1. Every 3 minutes...fetch the prediction
-	ticker := time.NewTicker(180 * time.Second)
-	defer ticker.Stop()
-	for {
-		<-ticker.C
-		for _, id := range parentStationIDs {
-			// fetch the prediction for both directions in parallel with error handling
-			go func(stopID string) {
-				defer func() {
-					if r := recover(); r != nil {
-						fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for stop %s: %v\n", stopID, r)
-					}
-				}()
-				
-				if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
-					fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
-				}
-				if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
-					fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
-				}
-			}(id)
-		}
-	}
+	// 		fmt.Println("\n==============================\n")
+	// 	}
+	// }()
+
+	// // 1. Every 3 minutes...fetch the prediction
+	// ticker := time.NewTicker(180 * time.Second)
+	// defer ticker.Stop()
+	// for {
+	// 	<-ticker.C
+	// 	for _, id := range parentStationIDs {
+	// 		// fetch the prediction for both directions in parallel with error handling
+	// 		go func(stopID string) {
+	// 			defer func() {
+	// 				if r := recover(); r != nil {
+	// 					fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for stop %s: %v\n", stopID, r)
+	// 				}
+	// 			}()
+
+	// 			if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
+	// 				fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
+	// 			}
+	// 			if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
+	// 				fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
+	// 			}
+	// 		}(id)
+	// 	}
+	// }
 }
