@@ -161,6 +161,11 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 		predictions = append(predictions, data)
 	}
 
+	// Check if we have at least 2 predictions
+	if len(predictions) < 2 {
+		return PredictionData{}, "nil", fmt.Errorf("need at least 2 predictions, got %d", len(predictions))
+	}
+
 	// Return the second prediction
 	res := predictions[1]
 	// Extract vehicle ID of the second prediction
@@ -180,6 +185,49 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 	fmt.Printf("Stored prediction: Stop %s, Dir %d, Vehicle %s (Arrival: %v)\n", stopID, direction, vehicle, res.ArrivalTime)
 
 	return res, vehicle, nil
+}
+
+// cleanupOldPredictions removes predictions older than 30 minutes to prevent memory leak
+func cleanupOldPredictions() {
+	predictionMutex.Lock()
+	defer predictionMutex.Unlock()
+	
+	cutoffTime := time.Now().Add(-30 * time.Minute)
+	cleanedCount := 0
+	
+	for stopID, directions := range predictionDataMap {
+		for direction, vehicles := range directions {
+			for vehicleID, predictions := range vehicles {
+				// Filter out old predictions
+				validPredictions := make([]PredictionData, 0)
+				for _, pred := range predictions {
+					if pred.ObservationTime.After(cutoffTime) {
+						validPredictions = append(validPredictions, pred)
+					} else {
+						cleanedCount++
+					}
+				}
+				
+				if len(validPredictions) > 0 {
+					predictionDataMap[stopID][direction][vehicleID] = validPredictions
+				} else {
+					delete(predictionDataMap[stopID][direction], vehicleID)
+				}
+			}
+			// Clean up empty direction maps
+			if len(predictionDataMap[stopID][direction]) == 0 {
+				delete(predictionDataMap[stopID], direction)
+			}
+		}
+		// Clean up empty stop maps
+		if len(predictionDataMap[stopID]) == 0 {
+			delete(predictionDataMap, stopID)
+		}
+	}
+	
+	if cleanedCount > 0 {
+		fmt.Printf("🧹 Cleaned up %d old predictions (older than 30 minutes)\n", cleanedCount)
+	}
 }
 
 func main_test_pred() {
@@ -228,6 +276,21 @@ func main_test_pred() {
 }
 
 func main() {
+	// Start periodic cleanup of old predictions (every 5 minutes)
+	go func() {
+		cleanupTicker := time.NewTicker(5 * time.Minute)
+		defer cleanupTicker.Stop()
+		fmt.Println("Started periodic prediction cleanup (every 5 minutes)...")
+		for {
+			<-cleanupTicker.C
+			cleanupOldPredictions()
+		}
+	}()
+	
+	// Start goroutine to monitor actual train arrivals
+	go actualArrivalMoment("Green-B")
+	fmt.Println("Started monitoring Green-B line for arrivals...")
+	
 	// Start goroutine to constantly listen for arrivals
 	go func() {
 		fmt.Println("Started listening to ArrivalChannel...")
@@ -324,10 +387,23 @@ func main() {
 						fmt.Printf("\nPrediction #%d: No predicted arrival time available\n", i+1)
 					}
 				}
+				
+				// Cleanup: Remove evaluated predictions to prevent memory leak
+				predictionMutex.RUnlock()
+				predictionMutex.Lock()
+				delete(predictionDataMap[arrival.StationStopID][arrival.Direction], arrival.TrainID)
+				if len(predictionDataMap[arrival.StationStopID][arrival.Direction]) == 0 {
+					delete(predictionDataMap[arrival.StationStopID], arrival.Direction)
+				}
+				if len(predictionDataMap[arrival.StationStopID]) == 0 {
+					delete(predictionDataMap, arrival.StationStopID)
+				}
+				predictionMutex.Unlock()
+				fmt.Printf("Cleaned up predictions for vehicle %s at stop %s\n", arrival.TrainID, arrival.StationStopID)
 			} else {
 				fmt.Println("No predictions found for this train arrival")
+				predictionMutex.RUnlock()
 			}
-			predictionMutex.RUnlock()
 
 			fmt.Println("\n==============================\n")
 		}
@@ -339,10 +415,20 @@ func main() {
 	for {
 		<-ticker.C
 		for _, id := range parentStationIDs {
-			// fetch the prediction for both directions in parallel.
+			// fetch the prediction for both directions in parallel with error handling
 			go func(stopID string) {
-				go fetchPrediction_single(stopID, 0)
-				go fetchPrediction_single(stopID, 1)
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for stop %s: %v\n", stopID, r)
+					}
+				}()
+				
+				if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
+					fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
+				}
+				if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
+					fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
+				}
 			}(id)
 		}
 	}

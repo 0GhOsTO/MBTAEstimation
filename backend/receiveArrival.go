@@ -32,7 +32,7 @@ type ArrivalInfo struct {
 }
 
 // Channel to send arrival notifications
-var ArrivalChannel = make(chan ArrivalInfo, 1000)
+var ArrivalChannel = make(chan ArrivalInfo, 5000)
 
 // dynamically store stop geolocations fetched from the API
 var dynamicStopGeoLocation = make(map[string][2]float64)
@@ -530,16 +530,34 @@ func actualArrivalMoment(routeName string) {
 		}
 
 		mapMutex.Lock()
+		staleVehicles := make([]string, 0)
 		for vehicleID := range actualTrainInfo {
 			if !currentVehicleIDs[vehicleID] {
 				delete(actualTrainInfo, vehicleID)
 				delete(vehicleNextStop, vehicleID)
 				delete(vehicleProximityCount, vehicleID)
 				delete(vehicleLastPollWithin20m, vehicleID)
+				staleVehicles = append(staleVehicles, vehicleID)
 				fmt.Printf("Cleaned up stale vehicle: %s\n", vehicleID)
 			}
 		}
 		mapMutex.Unlock()
+		
+		// Also clean up prediction data for stale vehicles
+		if len(staleVehicles) > 0 {
+			predictionMutex.Lock()
+			for _, vehicleID := range staleVehicles {
+				for stopID := range predictionDataMap {
+					for direction := range predictionDataMap[stopID] {
+						if _, exists := predictionDataMap[stopID][direction][vehicleID]; exists {
+							delete(predictionDataMap[stopID][direction], vehicleID)
+							fmt.Printf("Cleaned up predictions for stale vehicle %s at stop %s direction %d\n", vehicleID, stopID, direction)
+						}
+					}
+				}
+			}
+			predictionMutex.Unlock()
+		}
 
 		// 2. Update where is the next stop for the each vehicle.
 		// Only update if the vehicle has left the 20m radius of the current next stop
