@@ -168,18 +168,7 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 		return PredictionData{}, "nil", fmt.Errorf("no predictions available")
 	}
 
-	// Return the second prediction if available, otherwise return the first
-	var res PredictionData
-	if len(predictions) >= 2 {
-		res = predictions[1] // Prefer second prediction
-	} else {
-		res = predictions[0] // Fall back to first prediction if only one available
-	}
-
-	// Extract vehicle ID of the selected prediction
-	vehicle := res.VehicleID
-
-	// Store the prediction data in the map.
+	// Store ALL predictions for this stop to ensure we capture whichever vehicle actually arrives
 	predictionMutex.Lock()
 	if predictionDataMap[stopID] == nil {
 		predictionDataMap[stopID] = make(map[int]map[string][]PredictionData)
@@ -187,12 +176,38 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 	if predictionDataMap[stopID][direction] == nil {
 		predictionDataMap[stopID][direction] = make(map[string][]PredictionData)
 	}
-	predictionDataMap[stopID][direction][vehicle] = append(predictionDataMap[stopID][direction][vehicle], res)
+
+	// Store each prediction by its vehicle ID
+	storedCount := 0
+	for _, pred := range predictions {
+		if pred.VehicleID != "" && pred.ArrivalTime != nil {
+			predictionDataMap[stopID][direction][pred.VehicleID] = append(
+				predictionDataMap[stopID][direction][pred.VehicleID],
+				pred,
+			)
+			fmt.Printf("Stored prediction: Stop %s, Dir %d, Vehicle %s (Arrival: %v)\n",
+				stopID, direction, pred.VehicleID, pred.ArrivalTime)
+			storedCount++
+		}
+	}
 	predictionMutex.Unlock()
 
-	fmt.Printf("Stored prediction: Stop %s, Dir %d, Vehicle %s (Arrival: %v)\n", stopID, direction, vehicle, res.ArrivalTime)
+	if storedCount == 0 {
+		return PredictionData{}, "nil", fmt.Errorf("no valid predictions with arrival times")
+	}
 
-	return res, vehicle, nil
+	// Return the second prediction if available for backward compatibility
+	var returnPred PredictionData
+	var returnVehicle string
+	if len(predictions) >= 2 {
+		returnPred = predictions[1]
+		returnVehicle = predictions[1].VehicleID
+	} else {
+		returnPred = predictions[0]
+		returnVehicle = predictions[0].VehicleID
+	}
+
+	return returnPred, returnVehicle, nil
 }
 
 // cleanupOldPredictions removes predictions older than 30 minutes to prevent memory leak
