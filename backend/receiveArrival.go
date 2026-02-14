@@ -542,7 +542,7 @@ func actualArrivalMoment(routeName string) {
 			}
 		}
 		mapMutex.Unlock()
-		
+
 		// Also clean up prediction data for stale vehicles
 		if len(staleVehicles) > 0 {
 			predictionMutex.Lock()
