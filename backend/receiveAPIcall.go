@@ -90,12 +90,13 @@ type PredictionsResponse struct {
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("No .env found")
+		fmt.Println("⚠️  No .env file found (this is normal in production)")
 	}
 	key = os.Getenv("MBTA_API_KEY")
 	if key == "" {
-		panic("MBTA_API_KEY not set")
+		panic("❌ MBTA_API_KEY environment variable not set! Please set it in your deployment platform's environment variables.")
 	}
+	fmt.Println("✅ MBTA API key loaded successfully")
 }
 
 func fetchPrediction_single(stopID string, direction int) (PredictionData, string, error) {
@@ -161,14 +162,21 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 		predictions = append(predictions, data)
 	}
 
-	// Check if we have at least 2 predictions
-	if len(predictions) < 2 {
-		return PredictionData{}, "nil", fmt.Errorf("need at least 2 predictions, got %d", len(predictions))
+	// Check if we have any predictions
+	if len(predictions) == 0 {
+		// No predictions available - this is normal during off-peak hours
+		return PredictionData{}, "nil", fmt.Errorf("no predictions available")
 	}
 
-	// Return the second prediction
-	res := predictions[1]
-	// Extract vehicle ID of the second prediction
+	// Return the second prediction if available, otherwise return the first
+	var res PredictionData
+	if len(predictions) >= 2 {
+		res = predictions[1] // Prefer second prediction
+	} else {
+		res = predictions[0] // Fall back to first prediction if only one available
+	}
+
+	// Extract vehicle ID of the selected prediction
 	vehicle := res.VehicleID
 
 	// Store the prediction data in the map.
@@ -364,10 +372,11 @@ func main() {
 	// Start HTTP API server for frontend
 	go func() {
 		http.HandleFunc("/api/statistics", handleGetStatistics)
-		addr := ":" + port
-		fmt.Printf("🌐 HTTP API server starting on http://localhost:%s\n", port)
+		addr := "0.0.0.0:" + port
+		fmt.Printf("🌐 HTTP API server starting on port %s (accessible at http://0.0.0.0:%s)\n", port, port)
 		if err := http.ListenAndServe(addr, nil); err != nil {
 			fmt.Printf("❌ HTTP server error: %v\n", err)
+			panic(err) // Crash if server fails to start
 		}
 	}()
 
@@ -506,11 +515,11 @@ func main() {
 		}
 	}()
 
-	// Start goroutine to fetch predictions every 3 minutes
+	// Start goroutine to fetch predictions every 1 minutes
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
-		fmt.Println("Started periodic prediction fetching (every 3 minutes)...")
+		fmt.Println("Started periodic prediction fetching (every 1 minutes)...")
 
 		// Fetch predictions immediately on startup
 		fmt.Println("Fetching initial predictions...")
@@ -523,10 +532,14 @@ func main() {
 				}()
 
 				if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
-					fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
+					if err.Error() != "no predictions available" {
+						fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
+					}
 				}
 				if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
-					fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
+					if err.Error() != "no predictions available" {
+						fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
+					}
 				}
 			}(id)
 		}
@@ -545,10 +558,14 @@ func main() {
 					}()
 
 					if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
-						fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
+						if err.Error() != "no predictions available" {
+							fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
+						}
 					}
 					if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
-						fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
+						if err.Error() != "no predictions available" {
+							fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
+						}
 					}
 				}(id)
 			}
