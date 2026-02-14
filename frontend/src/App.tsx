@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
@@ -7,6 +7,15 @@ interface LogEntry {
   id: number;
   timestamp: string;
   message: string;
+}
+
+interface StationStats {
+  station_id: string;
+  station_name: string;
+  inbound_accuracy: number;
+  inbound_total: number;
+  outbound_accuracy: number;
+  outbound_total: number;
 }
 
 // Green Line stations with actual GPS coordinates
@@ -92,11 +101,38 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
   ],
 };
 
+// Map station names to backend station IDs
+const stationNameToID: { [key: string]: string } = {
+  "Boston College": "place-lake",
+  "South Street": "place-sougr",
+  "Chestnut Hill Ave": "place-chill",
+  "Chiswick Road": "place-chswk",
+  "Sutherland Road": "place-sthld",
+  "Washington Street": "place-wascm",
+  "Warren Street": "place-wrnst",
+  "Allston Street": "place-alsgr",
+  "Griggs Street": "place-grigg",
+  "Harvard Avenue": "place-harvd",
+  "Babcock Street": "70136", // Orphaned platform
+  "Pleasant Street": "70138", // Orphaned platform
+  "Saint Paul Street": "place-stpul",
+  "BU West": "70142", // Orphaned platform
+  "BU Central": "place-bucen",
+  "Blandford Street": "place-bland",
+  "Kenmore": "place-kencl",
+  "Hynes Convention Center": "place-hymnl",
+  "Copley": "place-coecl",
+  "Arlington": "place-armnl",
+  "Boylston": "place-boyls",
+  "Park Street": "place-pktrm",
+};
+
 function App() {
   const [selectedLine, setSelectedLine] = useState('Green-B')
-  const [inboundAccuracy, setInboundAccuracy] = useState(85)
-  const [outboundAccuracy, setOutboundAccuracy] = useState(78)
+  const [inboundAccuracy, setInboundAccuracy] = useState(0)
+  const [outboundAccuracy, setOutboundAccuracy] = useState(0)
   const [selectedStation, setSelectedStation] = useState("Park Street")
+  const [stationData, setStationData] = useState<{ [key: string]: StationStats }>({})
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 1,
@@ -104,6 +140,45 @@ function App() {
       message: "Application initialized",
     }
   ])
+
+  // Fetch statistics from backend
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    
+    const fetchStatistics = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/statistics`)
+        const data: StationStats[] = await response.json()
+        
+        // Convert array to map for easy lookup
+        const dataMap: { [key: string]: StationStats } = {}
+        data.forEach(stat => {
+          dataMap[stat.station_id] = stat
+        })
+        setStationData(dataMap)
+        
+        // Update current station if it has data
+        const stationID = stationNameToID[selectedStation]
+        if (stationID && dataMap[stationID]) {
+          setInboundAccuracy(Math.round(dataMap[stationID].inbound_accuracy))
+          setOutboundAccuracy(Math.round(dataMap[stationID].outbound_accuracy))
+        }
+        
+        addLog(`Fetched statistics for ${data.length} stations`)
+      } catch (error) {
+        console.error('Error fetching statistics:', error)
+        addLog('Error: Could not connect to backend')
+      }
+    }
+
+    // Fetch immediately
+    fetchStatistics()
+
+    // Fetch every 10 seconds
+    const interval = setInterval(fetchStatistics, 10000)
+
+    return () => clearInterval(interval)
+  }, [selectedStation])
 
   const currentStations = stationsByLine[selectedLine]
 
@@ -118,10 +193,21 @@ function App() {
 
   const handleStationSelect = (station: string) => {
     setSelectedStation(station)
-    // Random percentages for demo - replace with actual data from backend
-    setInboundAccuracy(Math.floor(Math.random() * 100))
-    setOutboundAccuracy(Math.floor(Math.random() * 100))
-    addLog(`Station selected: ${station}`)
+    
+    // Get station ID from name
+    const stationID = stationNameToID[station]
+    
+    if (stationID && stationData[stationID]) {
+      const stats = stationData[stationID]
+      setInboundAccuracy(Math.round(stats.inbound_accuracy))
+      setOutboundAccuracy(Math.round(stats.outbound_accuracy))
+      addLog(`Station: ${station} | Inbound: ${stats.inbound_total} predictions | Outbound: ${stats.outbound_total} predictions`)
+    } else {
+      // No data yet
+      setInboundAccuracy(0)
+      setOutboundAccuracy(0)
+      addLog(`${station} - No data available yet`)
+    }
   }
 
   const handleLineChange = (line: string) => {
@@ -136,16 +222,30 @@ function App() {
           <h1 className="station-name">{selectedStation}</h1>
           <div className="accuracy-circles-container">
             <div className="accuracy-item">
-              <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : 'poor'}`}>
-                <span className="percentage-number">{inboundAccuracy}%</span>
+              <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : inboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
+                <span className="percentage-number">
+                  {inboundAccuracy > 0 ? `${inboundAccuracy}%` : 'N/A'}
+                </span>
               </div>
               <p className="accuracy-label">Inbound</p>
+              {(() => {
+                const stationID = stationNameToID[selectedStation];
+                const total = stationID && stationData[stationID] ? stationData[stationID].inbound_total : 0;
+                return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
+              })()}
             </div>
             <div className="accuracy-item">
-              <div className={`percentage-circle ${outboundAccuracy >= 50 ? 'good' : 'poor'}`}>
-                <span className="percentage-number">{outboundAccuracy}%</span>
+              <div className={`percentage-circle ${outboundAccuracy >= 50 ? 'good' : outboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
+                <span className="percentage-number">
+                  {outboundAccuracy > 0 ? `${outboundAccuracy}%` : 'N/A'}
+                </span>
               </div>
               <p className="accuracy-label">Outbound</p>
+              {(() => {
+                const stationID = stationNameToID[selectedStation];
+                const total = stationID && stationData[stationID] ? stationData[stationID].outbound_total : 0;
+                return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
+              })()}
             </div>
           </div>
         </div>
