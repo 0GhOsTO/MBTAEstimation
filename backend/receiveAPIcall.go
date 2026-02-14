@@ -355,11 +355,18 @@ func main_test_pred() {
 }
 
 func main() {
+	// Get port from environment variable or use 8080 as default
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	// Start HTTP API server for frontend
 	go func() {
 		http.HandleFunc("/api/statistics", handleGetStatistics)
-		fmt.Println("🌐 HTTP API server starting on http://localhost:8080")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
+		addr := ":" + port
+		fmt.Printf("🌐 HTTP API server starting on http://localhost:%s\n", port)
+		if err := http.ListenAndServe(addr, nil); err != nil {
 			fmt.Printf("❌ HTTP server error: %v\n", err)
 		}
 	}()
