@@ -346,3 +346,133 @@
     height: 100vh;
   }
 }
+
+/* All Stations List */
+.all-stations-container {
+  margin-top: 3rem;
+  width: 100%;
+  max-width: 500px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.all-stations-container h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.stations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.station-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.station-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(128, 128, 128, 0.4);
+  transform: translateX(5px);
+}
+
+.station-row.selected {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+}
+
+.station-row-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: white;
+  flex: 1;
+}
+
+.station-row-stats {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.stat-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.stat-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.stat-value {
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  min-width: 45px;
+  text-align: center;
+}
+
+.stat-value.good {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.stat-value.poor {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.stat-value.no-data {
+  color: rgba(156, 163, 175, 0.8);
+  background: rgba(156, 163, 175, 0.1);
+}
+
+.stat-count {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+}
+
+/* Scrollbar for stations list */
+.stations-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.stations-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.stations-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.stations-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
