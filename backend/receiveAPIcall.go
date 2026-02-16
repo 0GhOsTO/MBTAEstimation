@@ -109,7 +109,7 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 		return PredictionData{}, "nil", err
 	}
 	req.Header.Set("x-api-key", key)
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -395,7 +395,7 @@ func main() {
 		}
 	}()
 
-	// Start periodic cleanup of old predictions (every 5 minutes)
+	// Start periodic cleanup of old predictions (every 30 minutes)
 	go func() {
 		cleanupTicker := time.NewTicker(30 * time.Minute)
 		defer cleanupTicker.Stop()
@@ -444,24 +444,13 @@ func main() {
 
 						// Score the prediction (smaller difference = better score)
 						absMinutes := math.Abs(diffMinutes)
-						var score string
 						var isCorrect bool
 
-						// Define "correct" as within 3 minutes of actual arrival
+						// Define "correct" as within 5 minutes of actual arrival
 						if absMinutes <= 5 {
 							isCorrect = true
-							if absMinutes <= 3 {
-								score = "EXCELLENT (CORRECT)"
-							} else {
-								score = "GOOD (CORRECT)"
-							}
 						} else {
 							isCorrect = false
-							if absMinutes <= 7 {
-								score = "FAIR (WRONG)"
-							} else {
-								score = "POOR (WRONG)"
-							}
 						}
 
 						if diffSeconds > 0 {
@@ -471,7 +460,6 @@ func main() {
 						} else {
 							fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
 						}
-						fmt.Printf("  Accuracy Score:    %s\n", score)
 
 						// Update statistics per station and direction
 						statsMutex.Lock()
@@ -536,9 +524,43 @@ func main() {
 		defer ticker.Stop()
 		fmt.Println("Started periodic prediction fetching (every 1 minutes)...")
 
+		// Only fetch predictions for Green-B parent stations
+		greenBStations := []string{
+			"place-lake",  // Boston College
+			"place-sougr", // South Street
+			"place-chill", // Chestnut Hill Avenue
+			"place-chswk", // Chiswick Road
+			"place-sthld", // Sutherland Road
+			"place-wascm", // Washington Street
+			"place-wrnst", // Warren Street
+			"place-alsgr", // Allston Street
+			"place-grigg", // Griggs Street
+			"place-harvd", // Harvard Avenue
+			"place-brico", // Packards Corner
+			"place-bucen", // Boston University Central
+			"place-buest", // Boston University East
+			"place-bland", // Blandford Street
+			"place-kencl", // Kenmore
+			"place-hymnl", // Hynes Convention Center
+			"place-coecl", // Copley
+			"place-armnl", // Arlington
+			"place-boyls", // Boylston
+			"place-pktrm", // Park Street
+			"place-gover", // Government Center
+			// Orphan B-line platforms that map to themselves
+			"70136", // Babcock Street
+			"70137", // Babcock Street
+			"70138", // Pleasant Street
+			"70139", // Pleasant Street
+			"70140", // Saint Paul Street (B)
+			"70141", // Saint Paul Street (B)
+			"70142", // Boston University West
+			"70143", // Boston University West
+		}
+
 		// Fetch predictions immediately on startup
 		fmt.Println("Fetching initial predictions...")
-		for _, id := range parentStationIDs {
+		for _, id := range greenBStations {
 			go func(stopID string) {
 				defer func() {
 					if r := recover(); r != nil {
@@ -563,7 +585,7 @@ func main() {
 		for {
 			<-ticker.C
 			fmt.Println("Fetching updated predictions...")
-			for _, id := range parentStationIDs {
+			for _, id := range greenBStations {
 				// fetch the prediction for both directions in parallel with error handling
 				go func(stopID string) {
 					defer func() {

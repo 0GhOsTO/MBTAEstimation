@@ -46,23 +46,143 @@ var vehicleProximityCount = make(map[string]int)
 // track if vehicle was within 20m on the last poll (for strict consecutive detection)
 var vehicleLastPollWithin20m = make(map[string]bool)
 
+// track which vehicle-stop pairs have already sent arrival notifications
+var vehicleStopArrivalSent = make(map[string]bool)
+
 var stationGeoLocation = map[string][2]float64{
-	"70106": {42.34018, -71.16709}, // Boston College
-	"70110": {42.33972, -71.16070}, // South Street
-	"70112": {42.33843, -71.15274}, // Chestnut Hill Ave
-	"70113": {42.33847, -71.15282}, // Chiswick Road
-	"70114": {42.33907, -71.14606}, // Sutherland Road
-	"70117": {42.34313, -71.14130}, // Washington Street
-	"70121": {42.34413, -71.14262}, // Warren Street
-	"70130": {42.35013, -71.13158}, // Allston Street
-	"70134": {42.35118, -71.12192}, // Griggs Street
-	"70144": {42.35005, -71.10722}, // Harvard Avenue
-	"70146": {42.35103, -71.11671}, // Packards Corner
-	"70153": {42.35188, -71.12068}, // Pleasant Street
-	"70154": {42.34788, -71.08627}, // St. Paul Street
-	"70155": {42.35018, -71.07710}, // Kent Street
-	"70157": {42.34956, -71.09979}, // Blandford Street
-	"70159": {42.34882, -71.09564}, // Kenmore
+	// Green Line B - Boston College Branch
+	"70106": {42.340149, -71.167029}, // Boston College
+	"70107": {42.340240, -71.166849}, // Boston College - Exit Only
+	"70110": {42.339371, -71.157057}, // South Street
+	"70111": {42.339581, -71.157499}, // South Street
+	"70112": {42.338730, -71.152526}, // Chestnut Hill Avenue
+	"70113": {42.338290, -71.153025}, // Chestnut Hill Avenue
+	"70114": {42.340808, -71.150633}, // Chiswick Road
+	"70115": {42.340540, -71.151140}, // Chiswick Road
+	"70116": {42.341589, -71.146089}, // Sutherland Road
+	"70117": {42.341577, -71.146607}, // Sutherland Road
+	"70120": {42.344329, -71.142385}, // Washington Street
+	"70121": {42.343974, -71.142731}, // Washington Street
+	"70124": {42.348285, -71.140436}, // Warren Street
+	"70125": {42.348819, -71.140051}, // Warren Street
+	"70126": {42.348649, -71.137881}, // Allston Street
+	"70127": {42.349251, -71.137398}, // Allston Street
+	"70128": {42.348747, -71.134500}, // Griggs Street
+	"70129": {42.348919, -71.134305}, // Griggs Street
+	"70130": {42.350263, -71.131298}, // Harvard Avenue
+	"70131": {42.350602, -71.130727}, // Harvard Avenue
+	"70134": {42.351891, -71.125067}, // Packard's Corner
+	"70135": {42.352136, -71.125126}, // Packard's Corner
+	"70144": {42.350013, -71.106902}, // Boston University Central
+	"70145": {42.349293, -71.106865}, // Boston University Central
+	"70146": {42.349659, -71.103989}, // Boston University East
+	"70147": {42.349148, -71.103767}, // Boston University East
+	"70148": {42.348881, -71.100258}, // Blandford Street
+	"70149": {42.349293, -71.100258}, // Blandford Street
+	"70150": {42.348949, -71.095169}, // Kenmore
+	"70151": {42.348949, -71.095169}, // Kenmore (C/D)
+	"70152": {42.347888, -71.087903}, // Hynes Convention Center
+	"70153": {42.347888, -71.087903}, // Hynes Convention Center
+	"70154": {42.349871, -71.078049}, // Copley
+	"70155": {42.350126, -71.077376}, // Copley
+	"70156": {42.351635, -71.070694}, // Arlington
+	"70157": {42.351902, -71.070893}, // Arlington
+	"70158": {42.352816, -71.064262}, // Boylston
+	"70159": {42.353214, -71.064545}, // Boylston
+	// Green Line D - Riverside Branch
+	"70160": {42.337317, -71.252256}, // Riverside
+	"70161": {42.337348, -71.252236}, // Riverside
+	"70162": {42.332703, -71.243055}, // Woodland
+	"70163": {42.333094, -71.243659}, // Woodland
+	"70164": {42.325695, -71.230476}, // Waban
+	"70165": {42.325967, -71.230714}, // Waban
+	"70166": {42.318871, -71.216420}, // Eliot
+	"70167": {42.319214, -71.216949}, // Eliot
+	"70168": {42.322738, -71.205082}, // Newton Highlands
+	"70169": {42.322530, -71.205421}, // Newton Highlands
+	"70170": {42.329552, -71.192024}, // Newton Centre
+	"70171": {42.329400, -71.192622}, // Newton Centre
+	"70172": {42.326799, -71.164146}, // Chestnut Hill (D)
+	"70173": {42.326782, -71.164780}, // Chestnut Hill (D)
+	"70174": {42.335181, -71.147879}, // Reservoir
+	"70175": {42.335163, -71.148601}, // Reservoir
+	"70176": {42.335860, -71.141426}, // Beaconsfield
+	"70177": {42.335850, -71.140823}, // Beaconsfield
+	"70178": {42.331470, -71.126999}, // Brookline Hills
+	"70179": {42.331577, -71.127155}, // Brookline Hills
+	"70180": {42.332614, -71.116751}, // Brookline Village
+	"70181": {42.332570, -71.117041}, // Brookline Village
+	"70182": {42.341808, -71.109777}, // Longwood (D)
+	"70183": {42.341571, -71.110147}, // Longwood (D)
+	"70186": {42.345328, -71.104269}, // Fenway
+	"70187": {42.345029, -71.104968}, // Fenway
+	// Green Line - Park Street Hub
+	"70196": {42.356395, -71.062424}, // Park Street (B)
+	"70197": {42.356395, -71.062424}, // Park Street (C)
+	"70198": {42.356395, -71.062424}, // Park Street (D)
+	"70199": {42.356395, -71.062424}, // Park Street (E)
+	"70200": {42.356395, -71.062424}, // Park Street
+	"71199": {42.356395, -71.062424}, // Park Street - Drop-off Only
+	// Green Line - Downtown/North
+	"70201": {42.359705, -71.059215}, // Government Center
+	"70202": {42.359705, -71.059215}, // Government Center
+	"70203": {42.363021, -71.058290}, // Haymarket
+	"70204": {42.363021, -71.058290}, // Haymarket
+	"70205": {42.365280, -71.060205}, // North Station
+	"70206": {42.365280, -71.060205}, // North Station
+	"70207": {42.366664, -71.067666}, // Science Park/West End
+	"70208": {42.366664, -71.067666}, // Science Park/West End
+	// Green Line C - Cleveland Circle Branch
+	"70211": {42.345884, -71.107697}, // Saint Mary's Street
+	"70212": {42.346007, -71.107166}, // Saint Mary's Street
+	"70213": {42.344758, -71.111761}, // Hawes Street
+	"70214": {42.344867, -71.111157}, // Hawes Street
+	"70215": {42.344117, -71.114097}, // Kent Street
+	"70216": {42.343927, -71.114569}, // Kent Street
+	"70217": {42.343340, -71.116927}, // Saint Paul Street (C)
+	"70218": {42.343118, -71.117498}, // Saint Paul Street (C)
+	"70219": {42.342274, -71.120915}, // Coolidge Corner
+	"70220": {42.342028, -71.121685}, // Coolidge Corner
+	"70223": {42.341120, -71.125652}, // Summit Avenue
+	"70224": {42.341027, -71.125759}, // Summit Avenue
+	"70225": {42.339700, -71.129082}, // Brandon Hall
+	"70226": {42.339623, -71.129192}, // Brandon Hall
+	"70227": {42.339690, -71.131228}, // Fairbanks Street
+	"70228": {42.339644, -71.131078}, // Fairbanks Street
+	"70229": {42.339668, -71.135040}, // Washington Square
+	"70230": {42.339461, -71.135649}, // Washington Square
+	"70231": {42.338498, -71.138731}, // Tappan Street
+	"70232": {42.338567, -71.138190}, // Tappan Street
+	"70233": {42.337807, -71.141753}, // Dean Road
+	"70234": {42.337628, -71.142309}, // Dean Road
+	"70235": {42.336964, -71.145867}, // Englewood Avenue
+	"70236": {42.337011, -71.145368}, // Englewood Avenue
+	"70237": {42.336216, -71.149201}, // Cleveland Circle - Exit Only
+	"70238": {42.336252, -71.148774}, // Cleveland Circle
+	// Green Line E - Heath Street Branch
+	"70239": {42.345570, -71.081696}, // Prudential
+	"70240": {42.345570, -71.081696}, // Prudential
+	"70241": {42.342687, -71.085056}, // Symphony
+	"70242": {42.342687, -71.085056}, // Symphony
+	"70243": {42.339897, -71.090210}, // Northeastern University
+	"70244": {42.340222, -71.089200}, // Northeastern University
+	"70245": {42.337875, -71.095240}, // Museum of Fine Arts
+	"70246": {42.338017, -71.094682}, // Museum of Fine Arts
+	"70247": {42.336080, -71.099883}, // Longwood Medical Area
+	"70248": {42.336217, -71.099328}, // Longwood Medical Area
+	"70249": {42.334229, -71.104609}, // Brigham Circle
+	"70250": {42.334291, -71.104122}, // Brigham Circle
+	"70251": {42.333740, -71.105721}, // Fenwood Road
+	"70252": {42.333706, -71.105583}, // Fenwood Road
+	"70253": {42.333279, -71.109276}, // Mission Park
+	"70254": {42.333092, -71.109680}, // Mission Park
+	"70255": {42.331391, -71.111925}, // Riverway
+	"70256": {42.331871, -71.111961}, // Riverway
+	"70257": {42.330139, -71.111313}, // Back of the Hill
+	"70258": {42.330528, -71.111565}, // Back of the Hill
+	// Kenmore additional platforms
+	"71150": {42.348949, -71.095169}, // Kenmore
+	"71151": {42.348949, -71.095169}, // Kenmore
 }
 
 // Static mapping of platform IDs to parent station (place) IDs for Green Line
@@ -454,7 +574,6 @@ func actualArrivalMoment(routeName string) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	// call once right away
 	for {
-		// @TODO: NEED to handle in go routine
 		// 1. Fetch data from the MBTA API the line.
 		url := fmt.Sprintf("https://api-v3.mbta.com/vehicles?filter[route]=%s", routeName)
 		req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
@@ -483,8 +602,6 @@ func actualArrivalMoment(routeName string) {
 
 		// Successfully received data from the MBTA API.
 		// =============================================
-		// TEST PRINT
-		fmt.Println("Received: ", string(body))
 
 		// 1. Save the status, related stop, longitude, latitude inside the actualTrainInfo map.
 		var vehiclesResp VehiclesResponse
@@ -537,6 +654,12 @@ func actualArrivalMoment(routeName string) {
 				delete(vehicleNextStop, vehicleID)
 				delete(vehicleProximityCount, vehicleID)
 				delete(vehicleLastPollWithin20m, vehicleID)
+				// Clean up arrival tracking for this vehicle
+				for key := range vehicleStopArrivalSent {
+					if strings.HasPrefix(key, vehicleID+"-") {
+						delete(vehicleStopArrivalSent, key)
+					}
+				}
 				staleVehicles = append(staleVehicles, vehicleID)
 				fmt.Printf("Cleaned up stale vehicle: %s\n", vehicleID)
 			}
@@ -591,8 +714,9 @@ func actualArrivalMoment(routeName string) {
 				}
 			}
 
-			// Only update next stop if vehicle doesn't have one OR has left the 40m radius
-			if !hasExistingNextStop || !withinRadius {
+			// Only update next stop if vehicle doesn't have one OR has left the 40m radius OR is stopped
+			// Exception: STOPPED_AT vehicles should always update to find the next-next stop
+			if !hasExistingNextStop || !withinRadius || currentStatus == "STOPPED_AT" {
 				// Check if vehicle is in transit or incoming - status tells us the referenced stop is the next stop
 				isApproaching := currentStatus == "IN_TRANSIT_TO" || currentStatus == "INCOMING_AT"
 
@@ -738,7 +862,11 @@ func actualArrivalMoment(routeName string) {
 					// Within 20m on BOTH last poll and current poll - strict consecutive detection
 					vehicleProximityCount[vehicleID]++
 
-					if vehicleProximityCount[vehicleID] == 2 {
+					// Create unique key for this vehicle-stop pair
+					arrivalKey := fmt.Sprintf("%s-%s", vehicleID, nextStopID)
+					alreadySent := vehicleStopArrivalSent[arrivalKey]
+
+					if vehicleProximityCount[vehicleID] == 2 && !alreadySent {
 						// Detected 2 consecutive times within 20m - vehicle is arriving
 						// WILL BE IN FORM OF RETURN
 						// Get parent station (place ID) for output
@@ -766,6 +894,8 @@ func actualArrivalMoment(routeName string) {
 						select {
 						case ArrivalChannel <- arrivalInfo:
 							fmt.Printf("Sent arrival info to channel: %+v\n", arrivalInfo)
+							// Mark this arrival as sent
+							vehicleStopArrivalSent[arrivalKey] = true
 						default:
 							fmt.Println("Warning: Arrival channel full, dropping message")
 						}
@@ -783,6 +913,12 @@ func actualArrivalMoment(routeName string) {
 				// Not within 20m - reset everything
 				vehicleProximityCount[vehicleID] = 0
 				vehicleLastPollWithin20m[vehicleID] = false
+				// Clear arrival tracking for this vehicle at any stop (vehicle has left)
+				for key := range vehicleStopArrivalSent {
+					if strings.HasPrefix(key, vehicleID+"-") {
+						delete(vehicleStopArrivalSent, key)
+					}
+				}
 			}
 			mapMutex.Unlock()
 
