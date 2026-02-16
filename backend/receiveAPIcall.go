@@ -362,6 +362,10 @@ func updateCachedAccuracy(stationID string) {
 			cached.OutboundAccuracy = 0.0
 		}
 	}
+
+	// Debug log to verify cache update
+	fmt.Printf("🔄 Updated cache for %s: Inbound=%.2f%% (%d total), Outbound=%.2f%% (%d total)\n",
+		stationID, cached.InboundAccuracy, cached.InboundTotal, cached.OutboundAccuracy, cached.OutboundTotal)
 }
 
 // HTTP handler for debug/health check
@@ -432,8 +436,27 @@ func handleGetStatistics(w http.ResponseWriter, r *http.Request) {
 
 	// Return all stations from the cached map (includes stations with 0 arrivals)
 	response := make([]StationAccuracyResponse, 0, len(cachedAccuracyMap))
+	nonZeroCount := 0
 	for _, stationData := range cachedAccuracyMap {
 		response = append(response, *stationData)
+		if stationData.InboundTotal > 0 || stationData.OutboundTotal > 0 {
+			nonZeroCount++
+		}
+	}
+
+	// Debug log to show what we're returning
+	fmt.Printf("📤 /api/statistics called: Returning %d stations (%d with data)\n", len(response), nonZeroCount)
+	if nonZeroCount > 0 {
+		// Show first station with non-zero data for debugging
+		for _, station := range response {
+			if station.InboundTotal > 0 || station.OutboundTotal > 0 {
+				fmt.Printf("   Sample: %s (%s) - In: %.2f%% (%d), Out: %.2f%% (%d)\n",
+					station.StationID, station.StationName,
+					station.InboundAccuracy, station.InboundTotal,
+					station.OutboundAccuracy, station.OutboundTotal)
+				break
+			}
+		}
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -538,6 +561,24 @@ func main() {
 			// Use StationPlaceID (parent station) to match how predictions are stored
 			predictionMutex.RLock()
 			fmt.Printf("Looking up predictions for Place ID: %s, Direction: %d, Train: %s\n", arrival.StationPlaceID, arrival.Direction, arrival.TrainID)
+
+			// Debug: Show what's in predictionDataMap for this station
+			if stationPreds, hasStation := predictionDataMap[arrival.StationPlaceID]; hasStation {
+				if dirPreds, hasDir := stationPreds[arrival.Direction]; hasDir {
+					fmt.Printf("  Found direction %d data with %d vehicles: %v\n", arrival.Direction, len(dirPreds), func() []string {
+						keys := make([]string, 0, len(dirPreds))
+						for k := range dirPreds {
+							keys = append(keys, k)
+						}
+						return keys
+					}())
+				} else {
+					fmt.Printf("  No predictions for direction %d\n", arrival.Direction)
+				}
+			} else {
+				fmt.Printf("  No predictions stored for station %s\n", arrival.StationPlaceID)
+			}
+
 			if predictions, exists := predictionDataMap[arrival.StationPlaceID][arrival.Direction][arrival.TrainID]; exists {
 				fmt.Printf("Found %d prediction(s) for this train:\n", len(predictions))
 
