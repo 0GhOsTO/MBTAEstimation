@@ -101,7 +101,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
   ],
 };
 
-// Map station names to backend station IDs
+// Map station names to backend station IDs (must match backend exactly)
 const stationNameToID: { [key: string]: string } = {
   "Boston College": "place-lake",
   "South Street": "place-sougr",
@@ -113,11 +113,13 @@ const stationNameToID: { [key: string]: string } = {
   "Allston Street": "place-alsgr",
   "Griggs Street": "place-grigg",
   "Harvard Avenue": "place-harvd",
-  "Babcock Street": "70136", // Orphaned platform
-  "Pleasant Street": "70138", // Orphaned platform
-  "Saint Paul Street": "place-stpul",
-  "BU West": "70142", // Orphaned platform
+  "Packards Corner": "place-brico",
+  "Babcock Street": "70136",  // Orphan platform
+  "Pleasant Street": "70138",  // Orphan platform
+  "Saint Paul Street": "70140",  // Orphan platform
+  "BU West": "70142",  // Orphan platform
   "BU Central": "place-bucen",
+  "BU East": "place-buest",
   "Blandford Street": "place-bland",
   "Kenmore": "place-kencl",
   "Hynes Convention Center": "place-hymnl",

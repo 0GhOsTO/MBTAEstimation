@@ -39,6 +39,39 @@ type StationStats struct {
 var stationAccuracyMap = make(map[string]map[int]*StationStats)
 var statsMutex sync.Mutex
 
+// Cached accuracy rates for quick API responses
+// Map structure: stationID -> StationAccuracyResponse (with calculated accuracy)
+var cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
+
+// Map of all Green Line B station IDs to friendly names
+var greenBStationNames = map[string]string{
+	"place-lake":  "Boston College",
+	"place-sougr": "South Street",
+	"place-chill": "Chestnut Hill Avenue",
+	"place-chswk": "Chiswick Road",
+	"place-sthld": "Sutherland Road",
+	"place-wascm": "Washington Street",
+	"place-wrnst": "Warren Street",
+	"place-alsgr": "Allston Street",
+	"place-grigg": "Griggs Street",
+	"place-harvd": "Harvard Avenue",
+	"place-brico": "Packards Corner",
+	// Orphan platforms (no parent station in MBTA API)
+	"70136":       "Babcock Street",
+	"70138":       "Pleasant Street",
+	"70140":       "Saint Paul Street",
+	"70142":       "Boston University West",
+	"place-bucen": "Boston University Central",
+	"place-buest": "Boston University East",
+	"place-bland": "Blandford Street",
+	"place-kencl": "Kenmore",
+	"place-hymnl": "Hynes Convention Center",
+	"place-coecl": "Copley",
+	"place-armnl": "Arlington",
+	"place-boyls": "Boylston",
+	"place-pktrm": "Park Street",
+}
+
 // Struct to hold prediction data
 // 1. observation time
 // 2. stop ID
@@ -263,6 +296,124 @@ type StationAccuracyResponse struct {
 	OutboundTotal    int     `json:"outbound_total"`
 }
 
+// Initialize all Green-B stations with zero values in the accuracy maps
+func initializeStationMaps() {
+	statsMutex.Lock()
+	defer statsMutex.Unlock()
+
+	for stationID, stationName := range greenBStationNames {
+		// Initialize stationAccuracyMap if needed
+		if stationAccuracyMap[stationID] == nil {
+			stationAccuracyMap[stationID] = make(map[int]*StationStats)
+		}
+		// Initialize both directions with zero values
+		if stationAccuracyMap[stationID][0] == nil {
+			stationAccuracyMap[stationID][0] = &StationStats{} // Outbound
+		}
+		if stationAccuracyMap[stationID][1] == nil {
+			stationAccuracyMap[stationID][1] = &StationStats{} // Inbound
+		}
+
+		// Initialize cached accuracy response for this station
+		cachedAccuracyMap[stationID] = &StationAccuracyResponse{
+			StationID:        stationID,
+			StationName:      stationName,
+			InboundAccuracy:  0.0,
+			InboundTotal:     0,
+			OutboundAccuracy: 0.0,
+			OutboundTotal:    0,
+		}
+	}
+
+	fmt.Printf("✅ Initialized accuracy maps for %d Green-B stations\n", len(greenBStationNames))
+}
+
+// Update cached accuracy for a specific station (call this after updating stats)
+func updateCachedAccuracy(stationID string) {
+	// Must be called with statsMutex already locked
+	if cachedAccuracyMap[stationID] == nil {
+		cachedAccuracyMap[stationID] = &StationAccuracyResponse{
+			StationID:   stationID,
+			StationName: greenBStationNames[stationID],
+		}
+		if cachedAccuracyMap[stationID].StationName == "" {
+			cachedAccuracyMap[stationID].StationName = stationID
+		}
+	}
+
+	cached := cachedAccuracyMap[stationID]
+
+	// Update inbound stats (direction 1)
+	if stats, exists := stationAccuracyMap[stationID][1]; exists {
+		cached.InboundTotal = stats.Total
+		if stats.Total > 0 {
+			cached.InboundAccuracy = float64(stats.Correct) / float64(stats.Total) * 100
+		} else {
+			cached.InboundAccuracy = 0.0
+		}
+	}
+
+	// Update outbound stats (direction 0)
+	if stats, exists := stationAccuracyMap[stationID][0]; exists {
+		cached.OutboundTotal = stats.Total
+		if stats.Total > 0 {
+			cached.OutboundAccuracy = float64(stats.Correct) / float64(stats.Total) * 100
+		} else {
+			cached.OutboundAccuracy = 0.0
+		}
+	}
+}
+
+// HTTP handler for debug/health check
+func handleDebug(w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	predictionMutex.RLock()
+	statsMutex.Lock()
+
+	// Count predictions
+	predictionCount := 0
+	for _, directions := range predictionDataMap {
+		for _, vehicles := range directions {
+			for _, predictions := range vehicles {
+				predictionCount += len(predictions)
+			}
+		}
+	}
+
+	// Count stations with stats
+	stationCount := len(stationAccuracyMap)
+	totalArrivals := 0
+	for _, directions := range stationAccuracyMap {
+		for _, stats := range directions {
+			totalArrivals += stats.Total
+		}
+	}
+
+	statsMutex.Unlock()
+	predictionMutex.RUnlock()
+
+	response := map[string]interface{}{
+		"status":            "running",
+		"api_key_set":       key != "",
+		"predictions_count": predictionCount,
+		"stations_tracked":  stationCount,
+		"total_arrivals":    totalArrivals,
+		"timestamp":         time.Now().Format(time.RFC3339),
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
 // HTTP handler to get all station statistics
 func handleGetStatistics(w http.ResponseWriter, r *http.Request) {
 	// Enable CORS
@@ -279,54 +430,10 @@ func handleGetStatistics(w http.ResponseWriter, r *http.Request) {
 	statsMutex.Lock()
 	defer statsMutex.Unlock()
 
-	// Map of station IDs to friendly names
-	stationNames := map[string]string{
-		"place-lake":  "Boston College",
-		"place-sougr": "South Street",
-		"place-chill": "Chestnut Hill Avenue",
-		"place-chswk": "Chiswick Road",
-		"place-sthld": "Sutherland Road",
-		"place-wascm": "Washington Street",
-		"place-wrnst": "Warren Street",
-		"place-alsgr": "Allston Street",
-		"place-grigg": "Griggs Street",
-		"place-harvd": "Harvard Avenue",
-		"place-brico": "Packards Corner",
-		"place-bucen": "Boston University Central",
-		"place-buest": "Boston University East",
-		"place-bland": "Blandford Street",
-		"place-kencl": "Kenmore",
-		"place-hymnl": "Hynes Convention Center",
-		"place-coecl": "Copley",
-		"place-armnl": "Arlington",
-		"place-boyls": "Boylston",
-		"place-pktrm": "Park Street",
-	}
-
-	response := make([]StationAccuracyResponse, 0)
-
-	for stationID, directions := range stationAccuracyMap {
-		stationResp := StationAccuracyResponse{
-			StationID:   stationID,
-			StationName: stationNames[stationID],
-		}
-		if stationResp.StationName == "" {
-			stationResp.StationName = stationID
-		}
-
-		// Get inbound stats (direction 1)
-		if stats, exists := directions[1]; exists && stats.Total > 0 {
-			stationResp.InboundAccuracy = float64(stats.Correct) / float64(stats.Total) * 100
-			stationResp.InboundTotal = stats.Total
-		}
-
-		// Get outbound stats (direction 0)
-		if stats, exists := directions[0]; exists && stats.Total > 0 {
-			stationResp.OutboundAccuracy = float64(stats.Correct) / float64(stats.Total) * 100
-			stationResp.OutboundTotal = stats.Total
-		}
-
-		response = append(response, stationResp)
+	// Return all stations from the cached map (includes stations with 0 arrivals)
+	response := make([]StationAccuracyResponse, 0, len(cachedAccuracyMap))
+	for _, stationData := range cachedAccuracyMap {
+		response = append(response, *stationData)
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -378,6 +485,9 @@ func main_test_pred() {
 }
 
 func main() {
+	// Initialize all Green-B stations with zero values
+	initializeStationMaps()
+
 	// Get port from environment variable or use 8080 as default
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -387,6 +497,7 @@ func main() {
 	// Start HTTP API server for frontend
 	go func() {
 		http.HandleFunc("/api/statistics", handleGetStatistics)
+		http.HandleFunc("/api/debug", handleDebug)
 		addr := "0.0.0.0:" + port
 		fmt.Printf("🌐 HTTP API server starting on port %s (accessible at http://0.0.0.0:%s)\n", port, port)
 		if err := http.ListenAndServe(addr, nil); err != nil {
@@ -479,6 +590,9 @@ func main() {
 						} else {
 							stats.Incorrect++
 						}
+
+						// Update cached accuracy for quick API responses
+						updateCachedAccuracy(arrival.StationPlaceID)
 
 						accuracy := float64(stats.Correct) / float64(stats.Total) * 100
 						directionName := "Outbound"
