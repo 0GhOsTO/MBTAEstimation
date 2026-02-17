@@ -45,6 +45,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Arlington", lat: 42.3524, lng: -71.0704 },
     { name: "Boylston", lat: 42.3530, lng: -71.0646 },
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
+    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
   ],
   'Green-C': [
     { name: "Cleveland Circle", lat: 42.3362, lng: -71.1495 },
@@ -63,6 +64,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Arlington", lat: 42.3524, lng: -71.0704 },
     { name: "Boylston", lat: 42.3530, lng: -71.0646 },
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
+    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
   ],
   'Green-D': [
     { name: "Riverside", lat: 42.3367, lng: -71.2514 },
@@ -84,6 +86,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Arlington", lat: 42.3524, lng: -71.0704 },
     { name: "Boylston", lat: 42.3530, lng: -71.0646 },
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
+    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
   ],
   'Green-E': [
     { name: "Heath Street", lat: 42.3282, lng: -71.1101 },
@@ -101,6 +104,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Arlington", lat: 42.3524, lng: -71.0704 },
     { name: "Boylston", lat: 42.3530, lng: -71.0646 },
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
+    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
   ],
 };
 
@@ -130,6 +134,7 @@ const stationNameToID: { [key: string]: string } = {
   "Arlington": "place-armnl",
   "Boylston": "place-boyls",
   "Park Street": "place-pktrm",
+  "Government Center": "place-gover",
 };
 
 function App() {

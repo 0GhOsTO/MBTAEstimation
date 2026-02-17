@@ -606,7 +606,7 @@ func main() {
 						var isCorrect bool
 
 						// Define "correct" as within 5 minutes of actual arrival
-						if absMinutes <= 5 {
+						if absMinutes <= 3 {
 							isCorrect = true
 						} else {
 							isCorrect = false
