@@ -29,6 +29,7 @@ type ArrivalInfo struct {
 	TrainID        string    // Vehicle/Train ID
 	Direction      int       // Direction ID (0 or 1)
 	ArrivalTime    time.Time // Time of arrival
+	TripID         string    // Trip ID for better matching reliability
 }
 
 // Channel to send arrival notifications
@@ -417,6 +418,7 @@ type ActualData struct {
 	Latitude        float64
 	Longitude       float64
 	DirectionID     int
+	TripID          string
 }
 
 // Struct to unmarshal MBTA vehicles API response
@@ -613,6 +615,11 @@ func actualArrivalMoment(routeName string) {
 		}
 
 		for _, vehicle := range vehiclesResp.Data {
+			// Skip vehicles with missing/empty IDs to avoid corrupting maps
+			if vehicle.ID == "" {
+				fmt.Println("Skipping vehicle with empty ID in actualTrainInfo update")
+				continue
+			}
 			observationTime, err := time.Parse(time.RFC3339, vehicle.Attributes.UpdatedAt)
 			if err != nil {
 				observationTime = time.Now()
@@ -621,6 +628,11 @@ func actualArrivalMoment(routeName string) {
 			relatedStop := ""
 			if vehicle.Relationships.Stop.Data != nil {
 				relatedStop = vehicle.Relationships.Stop.Data.ID
+			}
+
+			tripID := ""
+			if vehicle.Relationships.Trip.Data != nil {
+				tripID = vehicle.Relationships.Trip.Data.ID
 			}
 
 			directionID := vehicle.Attributes.DirectionID
@@ -634,6 +646,7 @@ func actualArrivalMoment(routeName string) {
 				Latitude:        vehicle.Attributes.Latitude,
 				Longitude:       vehicle.Attributes.Longitude,
 				DirectionID:     directionID,
+				TripID:          tripID,
 			}
 			mapMutex.Unlock()
 		}
@@ -643,6 +656,9 @@ func actualArrivalMoment(routeName string) {
 		// CLEANING THE STALE RESPONSE.
 		currentVehicleIDs := make(map[string]bool)
 		for _, vehicle := range vehiclesResp.Data {
+			if vehicle.ID == "" {
+				continue
+			}
 			currentVehicleIDs[vehicle.ID] = true
 		}
 
@@ -685,6 +701,11 @@ func actualArrivalMoment(routeName string) {
 		// 2. Update where is the next stop for the each vehicle.
 		// Only update if the vehicle has left the 20m radius of the current next stop
 		for _, vehicle := range vehiclesResp.Data {
+			// Skip vehicles with missing/empty IDs
+			if vehicle.ID == "" {
+				fmt.Println("Skipping vehicle with empty ID in next-stop update")
+				continue
+			}
 			currentStatus := vehicle.Attributes.CurrentStatus
 
 			// GTFS-RT assumes IN_TRANSIT_TO if status is missing/empty
@@ -738,10 +759,6 @@ func actualArrivalMoment(routeName string) {
 					// Vehicle is stopped, need to find next stop using predictions
 					if vehicle.Relationships.Trip.Data != nil {
 						tripID := vehicle.Relationships.Trip.Data.ID
-						currentStopSeq := 0
-						if vehicle.Attributes.CurrentStopSequence != nil {
-							currentStopSeq = *vehicle.Attributes.CurrentStopSequence
-						}
 
 						// Fetch predictions for this trip to find the next stop
 						predURL := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[trip]=%s&sort=stop_sequence", tripID)
@@ -769,6 +786,32 @@ func actualArrivalMoment(routeName string) {
 						err = json.Unmarshal(predBody, &tripData)
 						if err != nil {
 							fmt.Printf("Error parsing prediction JSON for vehicle %s: %v\n", vehicle.ID, err)
+							continue
+						}
+
+						// Get current stop ID if available
+						currentStopID := ""
+						if vehicle.Relationships.Stop.Data != nil {
+							currentStopID = vehicle.Relationships.Stop.Data.ID
+						}
+
+						// Try to determine current stop sequence
+						currentStopSeq := -1
+						if vehicle.Attributes.CurrentStopSequence != nil {
+							currentStopSeq = *vehicle.Attributes.CurrentStopSequence
+						} else if currentStopID != "" {
+							// Infer sequence from stop ID by searching tripData
+							for _, pred := range tripData.Data {
+								if pred.Relationships.Stop.Data.ID == currentStopID {
+									currentStopSeq = pred.Attributes.StopSequence
+									fmt.Printf("Vehicle %s: Inferred stop_sequence=%d from stop_id=%s\n", vehicle.ID, currentStopSeq, currentStopID)
+									break
+								}
+							}
+						}
+
+						if currentStopSeq < 0 {
+							fmt.Printf("Vehicle %s STOPPED_AT but can't determine stop_sequence; skipping update\n", vehicle.ID)
 							continue
 						}
 
@@ -851,6 +894,15 @@ func actualArrivalMoment(routeName string) {
 				nextStopCoords[0], nextStopCoords[1],
 			)
 
+			// Decide what to do under lock, but perform slow work (logging, channel send)
+			// outside the critical section.
+			var (
+				shouldSendArrival   bool
+				arrivalInfo         ArrivalInfo
+				arrivalKeyToMark    string
+				shouldClearArrivals bool
+			)
+
 			mapMutex.Lock()
 			// Check if vehicle was within 20m on last poll
 			lastPollWithin := vehicleLastPollWithin20m[vehicleID]
@@ -860,45 +912,42 @@ func actualArrivalMoment(routeName string) {
 				// Within 20m on current poll
 				if lastPollWithin {
 					// Within 20m on BOTH last poll and current poll - strict consecutive detection
-					vehicleProximityCount[vehicleID]++
+					// Be robust to missing or reset counter entries: ensure second
+					// consecutive detection reaches at least 2.
+					if vehicleProximityCount[vehicleID] < 1 {
+						vehicleProximityCount[vehicleID] = 2
+					} else {
+						vehicleProximityCount[vehicleID]++
+					}
 
-					// Create unique key for this vehicle-stop pair
-					arrivalKey := fmt.Sprintf("%s-%s", vehicleID, nextStopID)
+					// Create unique key for this vehicle-trip-stop combination.
+					// Including tripID makes it much harder to refire for the same
+					// physical stop on small nextStop churn within a single trip.
+					arrivalKey := fmt.Sprintf("%s-%s-%s", vehicleID, actualData.TripID, nextStopID)
 					alreadySent := vehicleStopArrivalSent[arrivalKey]
 
 					if vehicleProximityCount[vehicleID] == 2 && !alreadySent {
 						// Detected 2 consecutive times within 20m - vehicle is arriving
-						// WILL BE IN FORM OF RETURN
 						// Get parent station (place ID) for output
 						placeID := staticStopToParentStation[nextStopID]
 						if placeID == "" {
-							// Check dynamic mapping if not in static (already holding write lock)
+							// Check dynamic mapping if not in static
 							placeID = stopToParentStation[nextStopID]
 						}
 						if placeID == "" {
 							placeID = nextStopID // Fallback to stop ID if parent not found
 						}
-						fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
-							placeID, vehicleID, actualData.ObservationTime.Format(time.RFC3339), actualData.DirectionID, distance)
 
-						// Send arrival information to channel
-						arrivalInfo := ArrivalInfo{
+						arrivalInfo = ArrivalInfo{
 							StationPlaceID: placeID,
 							StationStopID:  nextStopID,
 							TrainID:        vehicleID,
 							Direction:      actualData.DirectionID,
 							ArrivalTime:    actualData.ObservationTime,
+							TripID:         actualData.TripID,
 						}
-
-						// Non-blocking send to avoid deadlock if no receiver
-						select {
-						case ArrivalChannel <- arrivalInfo:
-							fmt.Printf("Sent arrival info to channel: %+v\n", arrivalInfo)
-							// Mark this arrival as sent
-							vehicleStopArrivalSent[arrivalKey] = true
-						default:
-							fmt.Println("Warning: Arrival channel full, dropping message")
-						}
+						arrivalKeyToMark = arrivalKey
+						shouldSendArrival = true
 					} else if vehicleProximityCount[vehicleID] > 2 {
 						// Already reported arrival, keep count high to avoid duplicate reports
 						// Count will reset when vehicle leaves 20m radius
@@ -913,15 +962,51 @@ func actualArrivalMoment(routeName string) {
 				// Not within 20m - reset everything
 				vehicleProximityCount[vehicleID] = 0
 				vehicleLastPollWithin20m[vehicleID] = false
-				// Clear arrival tracking for this vehicle at any stop (vehicle has left)
+				// Clear arrival tracking only if vehicle is far away (>40m) to avoid GPS jitter causing duplicate arrivals
+				if distance > 40.0 {
+					shouldClearArrivals = true
+				}
+			}
+			mapMutex.Unlock()
+
+			// Perform logging and channel send outside of the lock
+			if shouldSendArrival {
+				fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
+					arrivalInfo.StationPlaceID,
+					arrivalInfo.TrainID,
+					arrivalInfo.ArrivalTime.Format(time.RFC3339),
+					arrivalInfo.Direction,
+					distance,
+				)
+
+				// Non-blocking send to avoid deadlock if no receiver
+				sent := false
+				select {
+				case ArrivalChannel <- arrivalInfo:
+					fmt.Printf("Sent arrival info to channel: %+v\n", arrivalInfo)
+					sent = true
+				default:
+					fmt.Println("Warning: Arrival channel full, dropping message")
+				}
+
+				// Only mark as sent if we actually enqueued the event
+				if sent && arrivalKeyToMark != "" {
+					mapMutex.Lock()
+					vehicleStopArrivalSent[arrivalKeyToMark] = true
+					mapMutex.Unlock()
+				}
+			}
+
+			// If the vehicle is far away, clear its arrival tracking outside the main critical section
+			if shouldClearArrivals {
+				mapMutex.Lock()
 				for key := range vehicleStopArrivalSent {
 					if strings.HasPrefix(key, vehicleID+"-") {
 						delete(vehicleStopArrivalSent, key)
 					}
 				}
+				mapMutex.Unlock()
 			}
-			mapMutex.Unlock()
-
 		}
 
 		<-ticker.C
@@ -931,7 +1016,7 @@ func actualArrivalMoment(routeName string) {
 // findParentStationByName searches for a parent station (location_type=1) with a matching name
 func findParentStationByName(stopName string, client *http.Client) (string, error) {
 	// Search for stations on Green Line with matching name
-	url := fmt.Sprintf("https://api-v3.mbta.com/stops?filter[route]=Green-B,Green-C,Green-D,Green-E&filter[location_type]=1")
+	url := "https://api-v3.mbta.com/stops?filter[route]=Green-B,Green-C,Green-D,Green-E&filter[location_type]=1"
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
 		return "", err

@@ -132,9 +132,9 @@ func init() {
 	fmt.Println("✅ MBTA API key loaded successfully")
 }
 
-func fetchPrediction_single(stopID string, direction int) (PredictionData, string, error) {
+func fetchPrediction_single(stopID string, direction int, parentStationID string) (PredictionData, string, error) {
 	// constructing the request.
-	//url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d", stopID, direction)
+	// stopID is the individual platform ID (e.g., "70106"), parentStationID is for storage (e.g., "place-lake")
 	// gets the next two predictions for the stop and direction, sorted by arrival time
 	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&sort=arrival_time&page[limit]=2", stopID, direction)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
@@ -201,25 +201,31 @@ func fetchPrediction_single(stopID string, direction int) (PredictionData, strin
 		return PredictionData{}, "nil", fmt.Errorf("no predictions available")
 	}
 
-	// Store ALL predictions for this stop to ensure we capture whichever vehicle actually arrives
-	predictionMutex.Lock()
-	if predictionDataMap[stopID] == nil {
-		predictionDataMap[stopID] = make(map[int]map[string][]PredictionData)
+	// Store ALL predictions under the parent station ID for matching with arrivals
+	// Use parentStationID if provided, otherwise fall back to stopID
+	storageKey := parentStationID
+	if storageKey == "" {
+		storageKey = stopID
 	}
-	if predictionDataMap[stopID][direction] == nil {
-		predictionDataMap[stopID][direction] = make(map[string][]PredictionData)
+
+	predictionMutex.Lock()
+	if predictionDataMap[storageKey] == nil {
+		predictionDataMap[storageKey] = make(map[int]map[string][]PredictionData)
+	}
+	if predictionDataMap[storageKey][direction] == nil {
+		predictionDataMap[storageKey][direction] = make(map[string][]PredictionData)
 	}
 
 	// Store each prediction by its vehicle ID
 	storedCount := 0
 	for _, pred := range predictions {
 		if pred.VehicleID != "" && pred.ArrivalTime != nil {
-			predictionDataMap[stopID][direction][pred.VehicleID] = append(
-				predictionDataMap[stopID][direction][pred.VehicleID],
+			predictionDataMap[storageKey][direction][pred.VehicleID] = append(
+				predictionDataMap[storageKey][direction][pred.VehicleID],
 				pred,
 			)
-			fmt.Printf("Stored prediction: Stop %s, Dir %d, Vehicle %s (Arrival: %v)\n",
-				stopID, direction, pred.VehicleID, pred.ArrivalTime)
+			fmt.Printf("Stored prediction: Platform %s → Station %s, Dir %d, Vehicle %s (Arrival: %v)\n",
+				stopID, storageKey, direction, pred.VehicleID, pred.ArrivalTime)
 			storedCount++
 		}
 	}
@@ -481,7 +487,7 @@ func main_test_pred() {
 		// Uncertainty by station vs uncertainty by the train ID.
 
 		//=======TESTING==========
-		pred, _, err := fetchPrediction_single("70135", 0) // example stop ID
+		pred, _, err := fetchPrediction_single("70135", 0, "place-brico") // example stop ID (Packards Corner)
 		if err != nil {
 			panic(err)
 		}
@@ -669,7 +675,7 @@ func main() {
 				predictionMutex.RUnlock()
 			}
 
-			fmt.Println("\n==============================\n")
+			fmt.Println("\n==============================")
 		}
 	}()
 
@@ -679,87 +685,69 @@ func main() {
 		defer ticker.Stop()
 		fmt.Println("Started periodic prediction fetching (every 1 minutes)...")
 
-		// Only fetch predictions for Green-B parent stations
-		greenBStations := []string{
-			"place-lake",  // Boston College
-			"place-sougr", // South Street
-			"place-chill", // Chestnut Hill Avenue
-			"place-chswk", // Chiswick Road
-			"place-sthld", // Sutherland Road
-			"place-wascm", // Washington Street
-			"place-wrnst", // Warren Street
-			"place-alsgr", // Allston Street
-			"place-grigg", // Griggs Street
-			"place-harvd", // Harvard Avenue
-			"place-brico", // Packards Corner
-			"place-bucen", // Boston University Central
-			"place-buest", // Boston University East
-			"place-bland", // Blandford Street
-			"place-kencl", // Kenmore
-			"place-hymnl", // Hynes Convention Center
-			"place-coecl", // Copley
-			"place-armnl", // Arlington
-			"place-boyls", // Boylston
-			"place-pktrm", // Park Street
-			"place-gover", // Government Center
-			// Orphan B-line platforms that map to themselves
-			"70136", // Babcock Street
-			"70137", // Babcock Street
-			"70138", // Pleasant Street
-			"70139", // Pleasant Street
-			"70140", // Saint Paul Street (B)
-			"70141", // Saint Paul Street (B)
-			"70142", // Boston University West
-			"70143", // Boston University West
+		// Map of platform stops to their parent stations
+		// Format: platformID -> parentStationID
+		platformToParent := map[string]string{
+			"70106": "place-lake", "70107": "place-lake", // Boston College
+			"70110": "place-sougr", "70111": "place-sougr", // South Street
+			"70112": "place-chill", "70113": "place-chill", // Chestnut Hill Avenue
+			"70114": "place-chswk", "70115": "place-chswk", // Chiswick Road
+			"70116": "place-sthld", "70117": "place-sthld", // Sutherland Road
+			"70120": "place-wascm", "70121": "place-wascm", // Washington Street
+			"70124": "place-wrnst", "70125": "place-wrnst", // Warren Street
+			"70126": "place-alsgr", "70127": "place-alsgr", // Allston Street
+			"70128": "place-grigg", "70129": "place-grigg", // Griggs Street
+			"70130": "place-harvd", "70131": "place-harvd", // Harvard Avenue
+			"70134": "place-brico", "70135": "place-brico", // Packards Corner
+			"70136": "70136", "70137": "70137", // Babcock Street (orphan)
+			"70138": "70138", "70139": "70139", // Pleasant Street (orphan)
+			"70140": "70140", "70141": "70141", // Saint Paul Street (orphan)
+			"70142": "70142", "70143": "70143", // Boston University West (orphan)
+			"70144": "place-bucen", "70145": "place-bucen", // Boston University Central
+			"70146": "place-buest", "70147": "place-buest", // Boston University East
+			"70148": "place-bland", "70149": "place-bland", // Blandford Street
+			"70150": "place-kencl", "70151": "place-kencl", "71150": "place-kencl", "71151": "place-kencl", // Kenmore
+			"70152": "place-hymnl", "70153": "place-hymnl", // Hynes Convention Center
+			"70154": "place-coecl", "70155": "place-coecl", // Copley
+			"70156": "place-armnl", "70157": "place-armnl", // Arlington
+			"70158": "place-boyls", "70159": "place-boyls", // Boylston
+			"70196": "place-pktrm", "70197": "place-pktrm", "70198": "place-pktrm", "70199": "place-pktrm", "70200": "place-pktrm", "71199": "place-pktrm", // Park Street
+			"70201": "place-gover", "70202": "place-gover", // Government Center
+		}
+
+		// Helper function to fetch predictions for a platform
+		fetchForPlatform := func(platformID, parentID string) {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for platform %s: %v\n", platformID, r)
+				}
+			}()
+
+			// Fetch both directions
+			if _, _, err := fetchPrediction_single(platformID, 0, parentID); err != nil {
+				if err.Error() != "no predictions available" {
+					fmt.Printf("⚠️  Error fetching prediction for platform %s direction 0: %v\n", platformID, err)
+				}
+			}
+			if _, _, err := fetchPrediction_single(platformID, 1, parentID); err != nil {
+				if err.Error() != "no predictions available" {
+					fmt.Printf("⚠️  Error fetching prediction for platform %s direction 1: %v\n", platformID, err)
+				}
+			}
 		}
 
 		// Fetch predictions immediately on startup
-		fmt.Println("Fetching initial predictions...")
-		for _, id := range greenBStations {
-			go func(stopID string) {
-				defer func() {
-					if r := recover(); r != nil {
-						fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for stop %s: %v\n", stopID, r)
-					}
-				}()
-
-				if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
-					if err.Error() != "no predictions available" {
-						fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
-					}
-				}
-				if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
-					if err.Error() != "no predictions available" {
-						fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
-					}
-				}
-			}(id)
+		fmt.Println("Fetching initial predictions for all platforms...")
+		for platformID, parentID := range platformToParent {
+			go fetchForPlatform(platformID, parentID)
 		}
 
 		// Then continue with periodic updates
 		for {
 			<-ticker.C
 			fmt.Println("Fetching updated predictions...")
-			for _, id := range greenBStations {
-				// fetch the prediction for both directions in parallel with error handling
-				go func(stopID string) {
-					defer func() {
-						if r := recover(); r != nil {
-							fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for stop %s: %v\n", stopID, r)
-						}
-					}()
-
-					if _, _, err := fetchPrediction_single(stopID, 0); err != nil {
-						if err.Error() != "no predictions available" {
-							fmt.Printf("⚠️  Error fetching prediction for stop %s direction 0: %v\n", stopID, err)
-						}
-					}
-					if _, _, err := fetchPrediction_single(stopID, 1); err != nil {
-						if err.Error() != "no predictions available" {
-							fmt.Printf("⚠️  Error fetching prediction for stop %s direction 1: %v\n", stopID, err)
-						}
-					}
-				}(id)
+			for platformID, parentID := range platformToParent {
+				go fetchForPlatform(platformID, parentID)
 			}
 		}
 	}()
