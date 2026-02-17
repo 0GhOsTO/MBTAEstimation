@@ -41,12 +41,6 @@ var dynamicStopGeoLocation = make(map[string][2]float64)
 // dynamically store stop ID to parent station (place ID) mapping
 var stopToParentStation = make(map[string]string)
 
-// track consecutive detections within 20m for each vehicle
-var vehicleProximityCount = make(map[string]int)
-
-// track if vehicle was within 20m on the last poll (for strict consecutive detection)
-var vehicleLastPollWithin20m = make(map[string]bool)
-
 // track which vehicle-stop pairs have already sent arrival notifications
 var vehicleStopArrivalSent = make(map[string]bool)
 
@@ -614,6 +608,7 @@ func actualArrivalMoment(routeName string) {
 			continue
 		}
 
+		// for the each vehicle, update the actualTrainInfo map with the latest status.
 		for _, vehicle := range vehiclesResp.Data {
 			// Skip vehicles with missing/empty IDs to avoid corrupting maps
 			if vehicle.ID == "" {
@@ -668,8 +663,6 @@ func actualArrivalMoment(routeName string) {
 			if !currentVehicleIDs[vehicleID] {
 				delete(actualTrainInfo, vehicleID)
 				delete(vehicleNextStop, vehicleID)
-				delete(vehicleProximityCount, vehicleID)
-				delete(vehicleLastPollWithin20m, vehicleID)
 				// Clean up arrival tracking for this vehicle
 				for key := range vehicleStopArrivalSent {
 					if strings.HasPrefix(key, vehicleID+"-") {
@@ -853,7 +846,7 @@ func actualArrivalMoment(routeName string) {
 		// Check the stationGeolocation map for the next stop ID to get its latitude and longitude.
 		// If it exists, compare it with the vehicle's current latitude and longitude stored in actualTrainInfo map.
 		// If not, perform the api call to get the next stop information and save into the stationGeolocation map.
-		// If the vehicle's current geolocation is under 20m radius of the next stop's geolocation in 2 times in a row,
+		// If the vehicle's current geolocation is under 20m radius of the next stop's geolocation,
 		// consider the vehicle is about arrive at the next stop.
 		// print [STOPID, VEHICLEID, TIMESTAMP]
 
@@ -870,14 +863,95 @@ func actualArrivalMoment(routeName string) {
 		mapMutex.RUnlock()
 
 		for vehicleID, actualData := range vehicleSnapshot {
-			nextStopID, hasNextStop := nextStopSnapshot[vehicleID]
-			if !hasNextStop {
-				// No next stop - reset proximity count and last poll state
+			// Priority: If the train is STOPPED_AT, treat its current RelatedStop as arrived
+			// regardless of what nextStopID says (nextStopID can be wrong).
+			if actualData.Status == "STOPPED_AT" && actualData.RelatedStop != "" {
+				var (
+					shouldSendArrival bool
+					arrivalInfo       ArrivalInfo
+					arrivalKeyToMark  string
+				)
+
 				mapMutex.Lock()
-				delete(vehicleProximityCount, vehicleID)
-				delete(vehicleLastPollWithin20m, vehicleID)
+				arrivalKey := fmt.Sprintf("%s-%s-%s", vehicleID, actualData.TripID, actualData.RelatedStop)
+				alreadySent := vehicleStopArrivalSent[arrivalKey]
+
+				if !alreadySent {
+					placeID := staticStopToParentStation[actualData.RelatedStop]
+					if placeID == "" {
+						placeID = stopToParentStation[actualData.RelatedStop]
+					}
+					if placeID == "" {
+						placeID = actualData.RelatedStop
+					}
+
+					arrivalInfo = ArrivalInfo{
+						StationPlaceID: placeID,
+						StationStopID:  actualData.RelatedStop,
+						TrainID:        vehicleID,
+						Direction:      actualData.DirectionID,
+						ArrivalTime:    actualData.ObservationTime,
+						TripID:         actualData.TripID,
+					}
+					arrivalKeyToMark = arrivalKey
+					shouldSendArrival = true
+				}
 				mapMutex.Unlock()
 
+				if shouldSendArrival {
+					fmt.Printf("[STOPPED_AT %s, %s, %s, Direction: %d] - Vehicle arrived at stop %s\n",
+						arrivalInfo.StationPlaceID,
+						arrivalInfo.TrainID,
+						arrivalInfo.ArrivalTime.Format(time.RFC3339),
+						arrivalInfo.Direction,
+						arrivalInfo.StationStopID,
+					)
+
+					// Non-blocking send to avoid deadlock if no receiver
+					sent := false
+					select {
+					case ArrivalChannel <- arrivalInfo:
+						fmt.Printf("Sent arrival info to channel (STOPPED_AT): %+v\n", arrivalInfo)
+						sent = true
+					default:
+						fmt.Println("Warning: Arrival channel full, dropping STOPPED_AT message")
+					}
+
+					if sent && arrivalKeyToMark != "" {
+						mapMutex.Lock()
+						vehicleStopArrivalSent[arrivalKeyToMark] = true
+						mapMutex.Unlock()
+					}
+				} else {
+					// If already sent and vehicle has moved far from the RelatedStop, clear tracking
+					// This allows future arrivals at different stops to be detected
+					if actualData.RelatedStop != "" {
+						stopCoords, err := fetchStopGeolocation(actualData.RelatedStop, client)
+						if err == nil {
+							distance := haversineDistance(
+								actualData.Latitude, actualData.Longitude,
+								stopCoords[0], stopCoords[1],
+							)
+							if distance > 40.0 {
+								mapMutex.Lock()
+								for key := range vehicleStopArrivalSent {
+									if strings.HasPrefix(key, vehicleID+"-") {
+										delete(vehicleStopArrivalSent, key)
+									}
+								}
+								mapMutex.Unlock()
+							}
+						}
+					}
+				}
+
+				// STOPPED_AT vehicles don't use distance-based detection; skip to next vehicle
+				continue
+			}
+
+			nextStopID, hasNextStop := nextStopSnapshot[vehicleID]
+			if !hasNextStop {
+				// No next stop for this vehicle
 				continue
 			}
 
@@ -904,65 +978,37 @@ func actualArrivalMoment(routeName string) {
 			)
 
 			mapMutex.Lock()
-			// Check if vehicle was within 20m on last poll
-			lastPollWithin := vehicleLastPollWithin20m[vehicleID]
 			currentPollWithin := distance <= 20.0
 
 			if currentPollWithin {
-				// Within 20m on current poll
-				if lastPollWithin {
-					// Within 20m on BOTH last poll and current poll - strict consecutive detection
-					// Be robust to missing or reset counter entries: ensure second
-					// consecutive detection reaches at least 2.
-					if vehicleProximityCount[vehicleID] < 1 {
-						vehicleProximityCount[vehicleID] = 2
-					} else {
-						vehicleProximityCount[vehicleID]++
+				// Train is within 20m of the next stop - consider it arrived
+				arrivalKey := fmt.Sprintf("%s-%s-%s", vehicleID, actualData.TripID, nextStopID)
+				alreadySent := vehicleStopArrivalSent[arrivalKey]
+
+				if !alreadySent {
+					// Get parent station (place ID) for output
+					placeID := staticStopToParentStation[nextStopID]
+					if placeID == "" {
+						// Check dynamic mapping if not in static
+						placeID = stopToParentStation[nextStopID]
+					}
+					if placeID == "" {
+						placeID = nextStopID // Fallback to stop ID if parent not found
 					}
 
-					// Create unique key for this vehicle-trip-stop combination.
-					// Including tripID makes it much harder to refire for the same
-					// physical stop on small nextStop churn within a single trip.
-					arrivalKey := fmt.Sprintf("%s-%s-%s", vehicleID, actualData.TripID, nextStopID)
-					alreadySent := vehicleStopArrivalSent[arrivalKey]
-
-					if vehicleProximityCount[vehicleID] == 2 && !alreadySent {
-						// Detected 2 consecutive times within 20m - vehicle is arriving
-						// Get parent station (place ID) for output
-						placeID := staticStopToParentStation[nextStopID]
-						if placeID == "" {
-							// Check dynamic mapping if not in static
-							placeID = stopToParentStation[nextStopID]
-						}
-						if placeID == "" {
-							placeID = nextStopID // Fallback to stop ID if parent not found
-						}
-
-						arrivalInfo = ArrivalInfo{
-							StationPlaceID: placeID,
-							StationStopID:  nextStopID,
-							TrainID:        vehicleID,
-							Direction:      actualData.DirectionID,
-							ArrivalTime:    actualData.ObservationTime,
-							TripID:         actualData.TripID,
-						}
-						arrivalKeyToMark = arrivalKey
-						shouldSendArrival = true
-					} else if vehicleProximityCount[vehicleID] > 2 {
-						// Already reported arrival, keep count high to avoid duplicate reports
-						// Count will reset when vehicle leaves 20m radius
+					arrivalInfo = ArrivalInfo{
+						StationPlaceID: placeID,
+						StationStopID:  nextStopID,
+						TrainID:        vehicleID,
+						Direction:      actualData.DirectionID,
+						ArrivalTime:    actualData.ObservationTime,
+						TripID:         actualData.TripID,
 					}
-				} else {
-					// First time within 20m (or just returned to 20m radius)
-					vehicleProximityCount[vehicleID] = 1
+					arrivalKeyToMark = arrivalKey
+					shouldSendArrival = true
 				}
-				// Update state for next poll
-				vehicleLastPollWithin20m[vehicleID] = true
 			} else {
-				// Not within 20m - reset everything
-				vehicleProximityCount[vehicleID] = 0
-				vehicleLastPollWithin20m[vehicleID] = false
-				// Clear arrival tracking only if vehicle is far away (>40m) to avoid GPS jitter causing duplicate arrivals
+				// If the vehicle is far away, clear its arrival tracking to allow future detections
 				if distance > 40.0 {
 					shouldClearArrivals = true
 				}
@@ -1010,130 +1056,5 @@ func actualArrivalMoment(routeName string) {
 		}
 
 		<-ticker.C
-	}
-}
-
-// findParentStationByName searches for a parent station (location_type=1) with a matching name
-func findParentStationByName(stopName string, client *http.Client) (string, error) {
-	// Search for stations on Green Line with matching name
-	url := "https://api-v3.mbta.com/stops?filter[route]=Green-B,Green-C,Green-D,Green-E&filter[location_type]=1"
-	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("x-api-key", key)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var stopsResponse StopsListResponse
-	if err := json.Unmarshal(body, &stopsResponse); err != nil {
-		return "", err
-	}
-
-	// Look for exact match or close match
-	stopNameLower := strings.ToLower(stopName)
-	for _, stop := range stopsResponse.Data {
-		if strings.ToLower(stop.Attributes.Name) == stopNameLower {
-			return stop.ID, nil
-		}
-	}
-
-	return "not-found", nil
-}
-
-// verifyStaticStopMappings checks all staticStopToParentStation mappings against the MBTA API
-func verifyStaticStopMappings() {
-	fmt.Println("=== Verifying staticStopToParentStation mappings ===")
-	fmt.Printf("Total stops to verify: %d\n\n", len(staticStopToParentStation))
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	correctCount := 0
-	incorrectCount := 0
-	errorCount := 0
-
-	for stopID, expectedParent := range staticStopToParentStation {
-		// Make API call to get stop info
-		url := fmt.Sprintf("https://api-v3.mbta.com/stops/%s", stopID)
-		req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
-		if err != nil {
-			fmt.Printf("❌ Error creating request for stop %s: %v\n", stopID, err)
-			errorCount++
-			continue
-		}
-		req.Header.Set("x-api-key", key)
-
-		resp, err := client.Do(req)
-		if err != nil {
-			fmt.Printf("❌ Error fetching stop %s: %v\n", stopID, err)
-			errorCount++
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			fmt.Printf("❌ Error reading response for stop %s: %v\n", stopID, err)
-			errorCount++
-			continue
-		}
-
-		var stopResponse SR
-		if err := json.Unmarshal(body, &stopResponse); err != nil {
-			fmt.Printf("❌ Error parsing JSON for stop %s: %v\n", stopID, err)
-			errorCount++
-			continue
-		}
-
-		// Get actual parent station from API
-		var actualParent string
-		locationType := stopResponse.Data.Attributes.LocationType
-		stopName := stopResponse.Data.Attributes.Name
-
-		if stopResponse.Data.Relationships.ParentStation.Data != nil {
-			actualParent = stopResponse.Data.Relationships.ParentStation.Data.ID
-		} else {
-			// No parent station - stop maps to itself
-			if locationType == 1 {
-				// This is a parent station, so it should map to itself
-				actualParent = stopID
-			} else {
-				// Orphaned platform - maps to itself
-				fmt.Printf("⚠️  Stop %s ('%s') has no parent, mapping to itself\n", stopID, stopName)
-				actualParent = stopID
-			}
-		}
-
-		// Compare
-		if actualParent == expectedParent {
-			correctCount++
-			fmt.Printf("✓ Stop %s: %s (correct, location_type=%d)\n", stopID, expectedParent, locationType)
-		} else {
-			incorrectCount++
-			fmt.Printf("✗ Stop %s: Expected '%s', Got '%s' (MISMATCH, location_type=%d)\n", stopID, expectedParent, actualParent, locationType)
-		}
-
-		// Small delay to avoid rate limiting
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	fmt.Println("\n=== Verification Summary ===")
-	fmt.Printf("✓ Correct: %d\n", correctCount)
-	fmt.Printf("✗ Incorrect: %d\n", incorrectCount)
-	fmt.Printf("❌ Errors: %d\n", errorCount)
-	fmt.Printf("Total: %d\n", len(staticStopToParentStation))
-
-	if incorrectCount > 0 {
-		fmt.Println("\n⚠️  WARNING: Some mappings are incorrect!")
-	} else if errorCount == 0 {
-		fmt.Println("\n✓ All mappings verified successfully!")
 	}
 }

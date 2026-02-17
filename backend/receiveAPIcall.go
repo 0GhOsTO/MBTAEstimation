@@ -70,6 +70,7 @@ var greenBStationNames = map[string]string{
 	"place-armnl": "Arlington",
 	"place-boyls": "Boylston",
 	"place-pktrm": "Park Street",
+	"place-gover": "Government Center",
 }
 
 // Struct to hold prediction data
