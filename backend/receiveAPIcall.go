@@ -250,12 +250,12 @@ func fetchPrediction_single(stopID string, direction int, parentStationID string
 	return returnPred, returnVehicle, nil
 }
 
-// cleanupOldPredictions removes predictions older than 30 minutes to prevent memory leak
+// cleanupOldPredictions removes predictions older than 2 hours to prevent memory leak
 func cleanupOldPredictions() {
 	predictionMutex.Lock()
 	defer predictionMutex.Unlock()
 
-	cutoffTime := time.Now().Add(-30 * time.Minute)
+	cutoffTime := time.Now().Add(-120 * time.Minute)
 	cleanedCount := 0
 
 	for stopID, directions := range predictionDataMap {
@@ -289,7 +289,7 @@ func cleanupOldPredictions() {
 	}
 
 	if cleanedCount > 0 {
-		fmt.Printf("🧹 Cleaned up %d old predictions (older than 30 minutes)\n", cleanedCount)
+		fmt.Printf("🧹 Cleaned up %d old predictions (older than 2 hours)\n", cleanedCount)
 	}
 }
 
@@ -536,11 +536,11 @@ func main() {
 		}
 	}()
 
-	// Start periodic cleanup of old predictions (every 30 minutes)
+	// Start periodic cleanup of old predictions (every 180 minutes)
 	go func() {
-		cleanupTicker := time.NewTicker(30 * time.Minute)
+		cleanupTicker := time.NewTicker(180 * time.Minute)
 		defer cleanupTicker.Stop()
-		fmt.Println("Started periodic prediction cleanup (every 30 minutes)...")
+		fmt.Println("Started periodic prediction cleanup (every 180 minutes)...")
 		for {
 			<-cleanupTicker.C
 			cleanupOldPredictions()
