@@ -1,4 +1,4 @@
-# [MBTA Estimation](https://vercel.com/andrew-chos-projects-415cbbd8/mbta-estimation)
+# [MBTA Estimation](https://mbta-estimation.vercel.app/)
 
 A real-time MBTA Green Line prediction accuracy tracker with an interactive web interface.
 
