@@ -547,6 +547,34 @@ func main() {
 		}
 	}()
 
+	// Keep-alive: Prevent Render.com from spinning down the server
+	// Ping ourselves every 14 minutes to maintain activity
+	go func() {
+		keepAliveTicker := time.NewTicker(10 * time.Minute)
+		defer keepAliveTicker.Stop()
+
+		// Get backend URL from environment or construct from PORT
+		backendURL := os.Getenv("RENDER_EXTERNAL_URL")
+		if backendURL == "" {
+			// Fallback: try to construct URL (works if RENDER env vars are available)
+			backendURL = "http://localhost:" + port
+		}
+
+		fmt.Printf("🔄 Started keep-alive service (pinging %s every 14 minutes)...\n", backendURL)
+
+		for {
+			<-keepAliveTicker.C
+			// Make a lightweight GET request to keep the server active
+			resp, err := http.Get(backendURL + "/api/statistics")
+			if err != nil {
+				fmt.Printf("⚠️  Keep-alive ping failed: %v\n", err)
+			} else {
+				resp.Body.Close()
+				fmt.Printf("✅ Keep-alive ping successful at %s\n", time.Now().Format(time.RFC3339))
+			}
+		}
+	}()
+
 	// Start goroutine to monitor actual train arrivals
 	go actualArrivalMoment("Green-B")
 	fmt.Println("Started monitoring Green-B line for arrivals...")
