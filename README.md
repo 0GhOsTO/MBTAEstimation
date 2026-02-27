@@ -55,10 +55,6 @@ $$
   - Scalability challenges such as limiting API calls and overhead and 
 
 ### Next Steps
-- [ ] Calculate prediction accuracy (error = |predicted_time - actual_time|)
-- [ ] Store historical prediction data
-- [ ] Compute trustworthiness scores per station
-- [ ] REST API endpoints to serve data to frontend
 - [ ] Database integration for persistent storage
 - [ ] Real-time WebSocket updates to frontend
 
