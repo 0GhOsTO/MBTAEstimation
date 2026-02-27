@@ -15,7 +15,7 @@ Being students at Boston University, the MBTA's green line is a significant mode
 Given a station $x$:
 
 $$
-Trustworthiness(x) = \frac{\sum(\text{correct predictions})}{\text(num. predictions)}
+Trustworthiness(x) = \frac{\sum(\text{correct predictions})}{\text{num. predictions}}
 $$
   
 where a correct prediction is:
