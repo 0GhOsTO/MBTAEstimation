@@ -58,6 +58,7 @@ $$
 - [ ] Database integration for persistent storage
 - [ ] Real-time WebSocket updates to frontend
 - [ ] Expand to other green line branches
+- [ ] Provide score interpretations on the front end
 
 ## Screenshots
 
