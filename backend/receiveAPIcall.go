@@ -575,6 +575,40 @@ func main() {
 		}
 	}()
 
+	// Reset statistics every 24 hours to show recent accuracy
+	go func() {
+		resetTicker := time.NewTicker(24 * time.Hour)
+		defer resetTicker.Stop()
+		fmt.Println("📊 Started daily statistics reset (every 24 hours)...")
+
+		for {
+			<-resetTicker.C
+			statsMutex.Lock()
+
+			// Count total predictions before reset
+			totalPredictions := 0
+			for _, directions := range stationAccuracyMap {
+				for _, stats := range directions {
+					totalPredictions += stats.Total
+				}
+			}
+
+			// Reset all station statistics
+			for stationID := range stationAccuracyMap {
+				for direction := range stationAccuracyMap[stationID] {
+					stationAccuracyMap[stationID][direction] = &StationStats{}
+				}
+			}
+
+			// Clear cached accuracy data
+			cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
+
+			statsMutex.Unlock()
+			fmt.Printf("📊 Statistics reset completed at %s - Cleared %d predictions from last 24h\n",
+				time.Now().Format(time.RFC3339), totalPredictions)
+		}
+	}()
+
 	// Start goroutine to monitor actual train arrivals
 	go actualArrivalMoment("Green-B")
 	fmt.Println("Started monitoring Green-B line for arrivals...")
