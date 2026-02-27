@@ -56,6 +56,7 @@ $$
 
 ### Next Steps
 - [ ] Database integration for persistent storage
+- [ ] deploy on AWS
 - [ ] Real-time WebSocket updates to frontend
 - [ ] Expand to other green line branches
 - [ ] Provide score interpretations on the front end
