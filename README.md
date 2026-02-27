@@ -52,11 +52,12 @@ $$
   - API only provides the result sorted by station
   - Hard to find the train's next stop directly. 
   - API has multiple edges cases such as null/empty responses or the reality and API differing.
-  - Scalability challenges such as limiting API calls and overhead and 
+  - Scalability challenges such as limiting API calls and database writes
 
 ### Next Steps
 - [ ] Database integration for persistent storage
 - [ ] Real-time WebSocket updates to frontend
+- [ ] Expand to other green line branches
 
 ## Screenshots
 
