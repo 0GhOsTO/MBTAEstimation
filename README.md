@@ -72,6 +72,12 @@ $$
 
 <img src="https://github.com/0GhOsTO/MBTAEstimation/blob/main/MBTAweb.png">
 
+### Data Flow Visualization
+
+<img src="https://github.com/0GhOsTO/MBTAEstimation/blob/main/dataVisualizationMBTA.gif">
+
+This visualization demonstrates the real-time data flow of our prediction accuracy system. The **green dot** represents the train moving along the route, while the **blue dots** mark the station stops. Each stop concurrently receives predictions for upcoming train arrivals. When the train arrives at a stop, the system immediately "grades" the prediction accuracy by comparing the predicted arrival time against the actual arrival time, measuring how on-time the prediction was.
+
 ## Tech Stack
 
 **Frontend:**
