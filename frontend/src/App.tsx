@@ -1,7 +1,19 @@
 import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'katex/dist/katex.min.css'
+import katex from 'katex'
 import './App.css'
+
+// Math component for rendering LaTeX
+function Math({ children, block = true }: { children: string; block?: boolean }) {
+  const html = katex.renderToString(children, {
+    throwOnError: false,
+    displayMode: block,
+  })
+  
+  return <div dangerouslySetInnerHTML={{ __html: html }} />
+}
 
 interface LogEntry {
   id: number;
@@ -143,6 +155,7 @@ function App() {
   const [outboundAccuracy, setOutboundAccuracy] = useState(0)
   const [selectedStation, setSelectedStation] = useState("Park Street")
   const [stationData, setStationData] = useState<{ [key: string]: StationStats }>({})
+  const [showEquation, setShowEquation] = useState(false)
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 1,
@@ -229,7 +242,29 @@ function App() {
     <div className="app-container">
       <div className="left-panel">
         <div className="trustworthiness-display">
-          <h1 className="station-name">{selectedStation}</h1>
+          <h1 className="project-title">MBTA Reliability</h1>
+          <h2 className="station-name">{selectedStation}</h2>
+          <button 
+            className="equation-toggle-btn"
+            onClick={() => setShowEquation(!showEquation)}
+          >
+            <span>{showEquation ? '▼' : '▶'}</span>
+            <span>How it's calculated</span>
+          </button>
+          {showEquation && (
+            <div className="equation-box">
+              <div className="equation-line">
+                <Math>
+                  {`\\text{Trustworthiness}(\\%) = \\frac{\\text{Correct Predictions}}{\\text{Total Predictions}} \\times 100`}
+                </Math>
+              </div>
+              <div className="equation-line">
+                <Math>
+                  {`\\text{Correct} = \\begin{cases} 1 & \\text{if } |\\text{Predicted} - \\text{Actual}| \\leq 3\\text{ min} \\\\\\\\ 0 & \\text{otherwise} \\end{cases}`}
+                </Math>
+              </div>
+            </div>
+          )}
           <div className="accuracy-circles-container">
             <div className="accuracy-item">
               <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : inboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
