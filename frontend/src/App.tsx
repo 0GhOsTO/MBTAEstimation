@@ -5,8 +5,8 @@ import 'katex/dist/katex.min.css'
 import katex from 'katex'
 import './App.css'
 
-// Math component for rendering LaTeX
-function Math({ children, block = true }: { children: string; block?: boolean }) {
+// LatexMath component for rendering LaTeX
+function LatexMath({ children, block = true }: { children: string; block?: boolean }) {
   const html = katex.renderToString(children, {
     throwOnError: false,
     displayMode: block,
@@ -254,14 +254,14 @@ function App() {
           {showEquation && (
             <div className="equation-box">
               <div className="equation-line">
-                <Math>
+                <LatexMath>
                   {`\\text{Trustworthiness}(\\%) = \\frac{\\text{Correct Predictions}}{\\text{Total Predictions}} \\times 100`}
-                </Math>
+                </LatexMath>
               </div>
               <div className="equation-line">
-                <Math>
+                <LatexMath>
                   {`\\text{Correct} = \\begin{cases} 1 & \\text{if } |\\text{Predicted} - \\text{Actual}| \\leq 3\\text{ min} \\\\\\\\ 0 & \\text{otherwise} \\end{cases}`}
-                </Math>
+                </LatexMath>
               </div>
             </div>
           )}
