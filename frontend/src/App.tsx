@@ -265,33 +265,48 @@ function App() {
               </div>
             </div>
           )}
-          <div className="accuracy-circles-container">
-            <div className="accuracy-item">
-              <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : inboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
-                <span className="percentage-number">
-                  {inboundAccuracy > 0 ? `${inboundAccuracy}%` : 'N/A'}
-                </span>
+          <div className="metrics-and-stations">
+            <div className="accuracy-circles-container">
+              <div className="accuracy-item">
+                <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : inboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
+                  <span className="percentage-number">
+                    {inboundAccuracy > 0 ? `${inboundAccuracy}%` : 'N/A'}
+                  </span>
+                </div>
+                <p className="accuracy-label">Inbound</p>
+                {(() => {
+                  const stationID = stationNameToID[selectedStation];
+                  const total = stationID && stationData[stationID] ? stationData[stationID].inbound_total : 0;
+                  return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
+                })()}
               </div>
-              <p className="accuracy-label">Inbound</p>
-              {(() => {
-                const stationID = stationNameToID[selectedStation];
-                const total = stationID && stationData[stationID] ? stationData[stationID].inbound_total : 0;
-                return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
-              })()}
-            </div>
-            <div className="accuracy-item">
-              <div className={`percentage-circle ${outboundAccuracy >= 50 ? 'good' : outboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
-                <span className="percentage-number">
-                  {outboundAccuracy > 0 ? `${outboundAccuracy}%` : 'N/A'}
-                </span>
+              <div className="accuracy-item">
+                <div className={`percentage-circle ${outboundAccuracy >= 50 ? 'good' : outboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
+                  <span className="percentage-number">
+                    {outboundAccuracy > 0 ? `${outboundAccuracy}%` : 'N/A'}
+                  </span>
+                </div>
+                <p className="accuracy-label">Outbound</p>
+                {(() => {
+                  const stationID = stationNameToID[selectedStation];
+                  const total = stationID && stationData[stationID] ? stationData[stationID].outbound_total : 0;
+                  return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
+                })()}
               </div>
-              <p className="accuracy-label">Outbound</p>
-              {(() => {
-                const stationID = stationNameToID[selectedStation];
-                const total = stationID && stationData[stationID] ? stationData[stationID].outbound_total : 0;
-                return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
-              })()}
             </div>
+          </div>
+          <div className="station-selector-container">
+            <select 
+              className="station-selector" 
+              value={selectedStation} 
+              onChange={(e) => handleStationSelect(e.target.value)}
+            >
+              {currentStations.map((station) => (
+                <option key={station.name} value={station.name}>
+                  {station.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
