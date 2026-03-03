@@ -33,6 +33,8 @@ $$
 - **Interactive Map**: Leaflet-based map showing all Green Line stations (B, C, D, E)
 - **Line Selection**: Dropdown menu to switch between Green Line branches
 - **Real-time Display**: Shows trustworthiness percentage for selected stations
+- **LaTeX Equations**: Mathematical formulas displayed with KaTeX rendering
+- **Collapsible Info**: Dropdown button to show/hide calculation methodology
 - **Activity Log**: Tracks user interactions and station selections
 - **Responsive Design**: Modern glass-morphism UI with dark theme
 
@@ -40,6 +42,8 @@ $$
 - **Go-based API Client**: Connects to MBTA V3 API for real-time data
 - **Vehicle Tracking**: Monitors all vehicles on Green Line routes
 - **Prediction Collection**: Fetches and stores prediction data every 30 seconds
+- **PostgreSQL Database**: Stores historical prediction and accuracy data
+- **REST API**: Serves statistics to frontend with real-time accuracy metrics
 - **Data Structures**:
   - `trainInfo`: Stores all predictions for each vehicle's entire trip
   - `trainNextStop`: Tracks only the next stop prediction for each vehicle
@@ -48,6 +52,7 @@ $$
   - Prediction API: Retrieves arrival/departure time predictions
   - Vehicle API: Gets current vehicle positions and status
   - Trip-based predictions: Finds next stops using trip IDs and stop sequences
+- **Current Work**: 🔧 Implementing SQL queries and data aggregation for historical accuracy graphs
 - **Hardships**:
   - API only provides the result sorted by station
   - Hard to find the train's next stop directly. 
@@ -55,9 +60,11 @@ $$
   - Scalability challenges such as limiting API calls and database writes
 
 ### Next Steps
-- [ ] Database integration for persistent storage
-- [ ] deploy on AWS
+- [ ] Complete SQL backend for accuracy graph visualization
+- [ ] Time-series graphs showing accuracy trends over time
+- [ ] Database optimization for historical data queries
 - [ ] Real-time WebSocket updates to frontend
+- [ ] Deploy on AWS
 - [ ] Expand to other green line branches
 - [ ] Provide score interpretations on the front end
 
@@ -71,10 +78,12 @@ $$
 - React + TypeScript
 - Vite
 - Leaflet (Interactive Maps)
+- KaTeX (LaTeX Math Rendering)
 - CSS3 (Glass-morphism design)
 
 **Backend:**
 - Go
+- PostgreSQL
 - MBTA V3 API
 - godotenv (Environment variables)
 
