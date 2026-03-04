@@ -183,8 +183,9 @@ function App() {
         // Update current station if it has data
         const stationID = stationNameToID[selectedStation]
         if (stationID && dataMap[stationID]) {
-          setInboundAccuracy(Math.round(dataMap[stationID].inbound_accuracy))
-          setOutboundAccuracy(Math.round(dataMap[stationID].outbound_accuracy))
+          updateAccuracyForStation(dataMap[stationID])
+        } else {
+          updateAccuracyForStation(undefined)
         }
         
         addLog(`Fetched statistics for ${data.length} stations`)
@@ -214,6 +215,17 @@ function App() {
     setLogs(prev => [newLog, ...prev].slice(0, 50)) // Keep only last 50 logs
   }
 
+  const updateAccuracyForStation = (stats?: StationStats) => {
+    if (!stats) {
+      setInboundAccuracy(0)
+      setOutboundAccuracy(0)
+      return
+    }
+
+    setInboundAccuracy(Math.round(stats.inbound_accuracy))
+    setOutboundAccuracy(Math.round(stats.outbound_accuracy))
+  }
+
   const handleStationSelect = (station: string) => {
     setSelectedStation(station)
     
@@ -222,13 +234,11 @@ function App() {
     
     if (stationID && stationData[stationID]) {
       const stats = stationData[stationID]
-      setInboundAccuracy(Math.round(stats.inbound_accuracy))
-      setOutboundAccuracy(Math.round(stats.outbound_accuracy))
+      updateAccuracyForStation(stats)
       addLog(`Station: ${station} | Inbound: ${stats.inbound_total} predictions | Outbound: ${stats.outbound_total} predictions`)
     } else {
       // No data yet
-      setInboundAccuracy(0)
-      setOutboundAccuracy(0)
+      updateAccuracyForStation(undefined)
       addLog(`${station} - No data available yet`)
     }
   }
@@ -237,6 +247,11 @@ function App() {
     setSelectedLine(line)
     addLog(`Switched to ${line}`)
   }
+
+  const selectedStationID = stationNameToID[selectedStation]
+  const selectedStats = selectedStationID ? stationData[selectedStationID] : undefined
+  const inboundTotal = selectedStats ? selectedStats.inbound_total : 0
+  const outboundTotal = selectedStats ? selectedStats.outbound_total : 0
 
   return (
     <div className="app-container">
@@ -268,30 +283,22 @@ function App() {
           <div className="metrics-and-stations">
             <div className="accuracy-circles-container">
               <div className="accuracy-item">
-                <div className={`percentage-circle ${inboundAccuracy >= 50 ? 'good' : inboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
+                <div className={`percentage-circle ${inboundTotal > 0 ? (inboundAccuracy >= 50 ? 'good' : 'poor') : 'no-data'}`}>
                   <span className="percentage-number">
-                    {inboundAccuracy > 0 ? `${inboundAccuracy}%` : 'N/A'}
+                    {inboundTotal > 0 ? `${inboundAccuracy}%` : 'N/A'}
                   </span>
                 </div>
                 <p className="accuracy-label">Inbound</p>
-                {(() => {
-                  const stationID = stationNameToID[selectedStation];
-                  const total = stationID && stationData[stationID] ? stationData[stationID].inbound_total : 0;
-                  return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
-                })()}
+                {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
               </div>
               <div className="accuracy-item">
-                <div className={`percentage-circle ${outboundAccuracy >= 50 ? 'good' : outboundAccuracy > 0 ? 'poor' : 'no-data'}`}>
+                <div className={`percentage-circle ${outboundTotal > 0 ? (outboundAccuracy >= 50 ? 'good' : 'poor') : 'no-data'}`}>
                   <span className="percentage-number">
-                    {outboundAccuracy > 0 ? `${outboundAccuracy}%` : 'N/A'}
+                    {outboundTotal > 0 ? `${outboundAccuracy}%` : 'N/A'}
                   </span>
                 </div>
                 <p className="accuracy-label">Outbound</p>
-                {(() => {
-                  const stationID = stationNameToID[selectedStation];
-                  const total = stationID && stationData[stationID] ? stationData[stationID].outbound_total : 0;
-                  return total > 0 ? <p className="prediction-count">({total} predictions)</p> : null;
-                })()}
+                {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
               </div>
             </div>
           </div>
