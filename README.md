@@ -15,9 +15,15 @@ Being students at Boston University, the MBTA's green line is a significant mode
 Given a station $x$:
 
 $$
-Trustworthiness(x) = \frac{\sum(\text{correct predictions})}{\text{num. predictions}}
+Trustworthiness(x) = \frac{\sum(\text{correct arrival events})}{\text{num. arrival events graded}}
 $$
   
+For each train arrival event, we select exactly one prediction snapshot:
+
+$$
+\text{prediction snapshot time} \approx \text{actual arrival time} - 5 \text{ minutes}
+$$
+
 where a correct prediction is:
 
 $$
@@ -77,6 +83,8 @@ $$
 <img src="https://github.com/0GhOsTO/MBTAEstimation/blob/main/dataVisualizationMBTA.gif">
 
 This visualization demonstrates the real-time data flow of our prediction accuracy system. The **green dot** represents the train moving along the route, while the **blue dots** mark the station stops. Each stop concurrently receives predictions for upcoming train arrivals. When the train arrives at a stop, the system immediately "grades" the prediction accuracy by comparing the predicted arrival time against the actual arrival time, measuring how on-time the prediction was.
+
+The grading uses the prediction observed closest to **5 minutes before** the actual arrival time (not the last-second prediction right before arrival).
 
 ## Tech Stack
 

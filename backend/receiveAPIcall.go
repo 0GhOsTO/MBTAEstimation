@@ -650,77 +650,74 @@ func main() {
 
 			if predictions, exists := predictionDataMap[arrival.StationPlaceID][arrival.Direction][arrival.TrainID]; exists {
 				fmt.Printf("Found %d prediction(s) for this train:\n", len(predictions))
-
-				for i, pred := range predictions {
-					if pred.ArrivalTime != nil {
-						// Calculate difference between predicted and actual
-						difference := arrival.ArrivalTime.Sub(*pred.ArrivalTime)
-						diffSeconds := difference.Seconds()
-						diffMinutes := difference.Minutes()
-
-						fmt.Printf("\nPrediction #%d:\n", i+1)
-						fmt.Printf("  Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-						fmt.Printf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
-						fmt.Printf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
-
-						// Score the prediction (smaller difference = better score)
-						absMinutes := math.Abs(diffMinutes)
-						var isCorrect bool
-
-						// Define "correct" as within 5 minutes of actual arrival
-						if absMinutes <= 3 {
-							isCorrect = true
-						} else {
-							isCorrect = false
-						}
-
-						if diffSeconds > 0 {
-							fmt.Printf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
-						} else if diffSeconds < 0 {
-							fmt.Printf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
-						} else {
-							fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
-						}
-
-						// Update statistics per station and direction
-						statsMutex.Lock()
-						// Initialize station map if needed
-						if stationAccuracyMap[arrival.StationPlaceID] == nil {
-							stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
-						}
-						// Initialize direction stats if needed
-						if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
-							stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
-						}
-
-						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
-						stats.Total++
-						if isCorrect {
-							stats.Correct++
-						} else {
-							stats.Incorrect++
-						}
-
-						// Update cached accuracy for quick API responses
-						updateCachedAccuracy(arrival.StationPlaceID)
-
-						accuracy := float64(stats.Correct) / float64(stats.Total) * 100
-						directionName := "Outbound"
-						if arrival.Direction == 1 {
-							directionName = "Inbound"
-						}
-
-						fmt.Printf("\n📊 STATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
-						fmt.Printf("   Total Predictions: %d\n", stats.Total)
-						fmt.Printf("   Correct (≤5 min): %d\n", stats.Correct)
-						fmt.Printf("   Wrong (>5 min):   %d\n", stats.Incorrect)
-						fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
-						statsMutex.Unlock()
-					} else {
-						fmt.Printf("\nPrediction #%d: No predicted arrival time available\n", i+1)
+				targetObservationTime := arrival.ArrivalTime.Add(-5 * time.Minute)
+				var selectedPred *PredictionData
+				selectedIndex := -1
+				minObservationDeltaSeconds := math.MaxFloat64
+				// Score only one snapshot: the one observed closest to actual arrival - 5 minutes.
+				for i := range predictions {
+					pred := &predictions[i]
+					if pred.ArrivalTime == nil {
+						continue
+					}
+					if pred.ObservationTime.After(arrival.ArrivalTime) {
+						continue
+					}
+					observationDeltaSeconds := math.Abs(pred.ObservationTime.Sub(targetObservationTime).Seconds())
+					if selectedPred == nil || observationDeltaSeconds < minObservationDeltaSeconds {
+						selectedPred = pred
+						selectedIndex = i
+						minObservationDeltaSeconds = observationDeltaSeconds
 					}
 				}
-
+				if selectedPred != nil {
+					difference := arrival.ArrivalTime.Sub(*selectedPred.ArrivalTime)
+					diffSeconds := difference.Seconds()
+					diffMinutes := difference.Minutes()
+					fmt.Printf("\nSelected prediction #%d for scoring (closest to arrival-5m):\n", selectedIndex+1)
+					fmt.Printf("  Snapshot Time:     %s\n", selectedPred.ObservationTime.Format(time.RFC3339))
+					fmt.Printf("  Target Time:       %s\n", targetObservationTime.Format(time.RFC3339))
+					fmt.Printf("  Predicted Arrival: %s\n", selectedPred.ArrivalTime.Format(time.RFC3339))
+					fmt.Printf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+					fmt.Printf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
+					isCorrect := math.Abs(diffMinutes) <= 3
+					if diffSeconds > 0 {
+						fmt.Printf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
+					} else if diffSeconds < 0 {
+						fmt.Printf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
+					} else {
+						fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
+					}
+					// Update statistics once per arrival event.
+					statsMutex.Lock()
+					if stationAccuracyMap[arrival.StationPlaceID] == nil {
+						stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
+					}
+					if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
+						stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
+					}
+					stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+					stats.Total++
+					if isCorrect {
+						stats.Correct++
+					} else {
+						stats.Incorrect++
+					}
+					updateCachedAccuracy(arrival.StationPlaceID)
+					accuracy := float64(stats.Correct) / float64(stats.Total) * 100
+					directionName := "Outbound"
+					if arrival.Direction == 1 {
+						directionName = "Inbound"
+					}
+					fmt.Printf("\nSTATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
+					fmt.Printf("   Total Predictions: %d\n", stats.Total)
+					fmt.Printf("   Correct (<=3 min): %d\n", stats.Correct)
+					fmt.Printf("   Wrong (>3 min):   %d\n", stats.Incorrect)
+					fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
+					statsMutex.Unlock()
+				} else {
+					fmt.Println("No valid prediction snapshot found near arrival-5m")
+				}
 				// Cleanup: Remove evaluated predictions to prevent memory leak
 				predictionMutex.RUnlock()
 				predictionMutex.Lock()
