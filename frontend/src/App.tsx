@@ -150,12 +150,60 @@ const stationNameToID: { [key: string]: string } = {
 };
 
 const supportedLines = ['Green-B'] as const
+const STORAGE_KEY = 'mbta-reliability-ui-state'
+
+interface PersistedUIState {
+  selectedLine: string
+  selectedStation: string
+}
+
+const getInitialUIState = (): PersistedUIState => {
+  const fallbackState: PersistedUIState = {
+    selectedLine: 'Green-B',
+    selectedStation: 'Park Street',
+  }
+
+  if (typeof window === 'undefined') {
+    return fallbackState
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) {
+      return fallbackState
+    }
+
+    const parsed = JSON.parse(raw) as Partial<PersistedUIState>
+    const line = parsed.selectedLine
+    const station = parsed.selectedStation
+
+    if (!line || !stationsByLine[line]) {
+      return fallbackState
+    }
+
+    const stationExistsOnLine = stationsByLine[line].some((s) => s.name === station)
+    if (!station || !stationExistsOnLine) {
+      return {
+        selectedLine: line,
+        selectedStation: stationsByLine[line][0].name,
+      }
+    }
+
+    return {
+      selectedLine: line,
+      selectedStation: station,
+    }
+  } catch {
+    return fallbackState
+  }
+}
 
 function App() {
-  const [selectedLine, setSelectedLine] = useState('Green-B')
+  const initialUIState = getInitialUIState()
+  const [selectedLine, setSelectedLine] = useState(initialUIState.selectedLine)
   const [inboundAccuracy, setInboundAccuracy] = useState(0)
   const [outboundAccuracy, setOutboundAccuracy] = useState(0)
-  const [selectedStation, setSelectedStation] = useState("Park Street")
+  const [selectedStation, setSelectedStation] = useState(initialUIState.selectedStation)
   const [stationData, setStationData] = useState<{ [key: string]: StationStats }>({})
   const [showEquation, setShowEquation] = useState(false)
   const [logs, setLogs] = useState<LogEntry[]>([
@@ -207,6 +255,17 @@ function App() {
   }, [selectedStation])
 
   const currentStations = stationsByLine[selectedLine]
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ selectedLine, selectedStation }),
+      )
+    } catch {
+      // Ignore storage write errors (private browsing, quota, etc).
+    }
+  }, [selectedLine, selectedStation])
 
   const addLog = (message: string) => {
     const newLog: LogEntry = {
