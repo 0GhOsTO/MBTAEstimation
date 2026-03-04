@@ -46,9 +46,13 @@ var canonicalStationAliases = map[string]string{
 	"place-babck": "70136", // Babcock Street
 	"170136":      "70136", // Babcock Street inbound platform variant
 	"170137":      "70136", // Babcock Street outbound platform variant
+	"170138":      "70138", // Pleasant Street inbound platform variant
+	"170139":      "70138", // Pleasant Street outbound platform variant
 	"place-amory": "70140", // Saint Paul Street (B) renamed in MBTA feeds
 	"170140":      "70140", // Amory Street inbound platform variant
 	"170141":      "70140", // Amory Street outbound platform variant
+	"170142":      "70142", // Boston University West inbound platform variant
+	"170143":      "70142", // Boston University West outbound platform variant
 }
 
 func normalizeStationKey(id string) string {
@@ -228,10 +232,14 @@ var staticStopToParentStation = map[string]string{
 	"70137": "70136",       // Babcock Street
 	"70138": "70138",       // Pleasant Street
 	"70139": "70138",       // Pleasant Street
+	"170138": "70138",      // Pleasant Street
+	"170139": "70138",      // Pleasant Street
 	"70140": "70140",       // Saint Paul Street (B)
 	"70141": "70140",       // Saint Paul Street (B)
 	"70142": "70142",       // Boston University West
 	"70143": "70142",       // Boston University West
+	"170142": "70142",      // Boston University West
+	"170143": "70142",      // Boston University West
 	"70144": "place-bucen", // Boston University Central
 	"70145": "place-bucen", // Boston University Central
 	"70146": "place-buest", // Boston University East
