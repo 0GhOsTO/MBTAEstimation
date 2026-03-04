@@ -217,10 +217,14 @@ function App() {
   // Fetch statistics from backend
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const STATS_PATH = import.meta.env.VITE_STATS_PATH || '/api/v1/statistics'
     
     const fetchStatistics = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/statistics`)
+        const response = await fetch(`${API_URL}${STATS_PATH}`)
+        if (!response.ok) {
+          throw new Error(`statistics request failed: ${response.status}`)
+        }
         const data: StationStats[] = await response.json()
         
         // Convert array to map for easy lookup

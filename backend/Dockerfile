@@ -1,28 +1,13 @@
-# Build stage
 FROM golang:1.22-alpine AS builder
-
 WORKDIR /app
-
-# Copy go mod files
 COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy source code
 COPY *.go ./
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags='-s -w' -o mbta-backend .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o mbta-backend .
-
-# Run stage
-FROM alpine:latest
-
+FROM gcr.io/distroless/static-debian12
 WORKDIR /app
-
-# Copy binary from builder
-COPY --from=builder /app/mbta-backend .
-
-# Expose port (Railway/Render will use PORT env var)
+COPY --from=builder /app/mbta-backend /app/mbta-backend
 EXPOSE 8080
-
-# Run the application
-CMD ["./mbta-backend"]
+USER nonroot:nonroot
+ENTRYPOINT ["/app/mbta-backend"]

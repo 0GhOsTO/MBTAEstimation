@@ -20,7 +20,7 @@ func init() {
 	}
 	apiKey = os.Getenv("MBTA_API_KEY")
 	if apiKey == "" {
-		panic("MBTA_API_KEY not set")
+		fmt.Println("MBTA_API_KEY not set; helper functions requiring live API will be disabled")
 	}
 }
 

@@ -74,6 +74,16 @@ $$
 - [ ] Expand to other green line branches
 - [ ] Provide score interpretations on the front end
 
+
+## AWS/Cloud Deployment Notes
+
+- **Backend (ECS/Fargate or App Runner):** uses `DATABASE_URL` (recommended for RDS/Timescale) or `DB_*` variables, and stores prediction snapshots directly in PostgreSQL instead of in-memory maps.
+- **Security defaults:** DB connections default to `DB_SSLMODE=require`; API CORS is restricted by `ALLOWED_ORIGINS` (comma-separated), defaulting to `http://localhost:5173` in local dev.
+- **TimescaleDB:** backend automatically tries `CREATE EXTENSION timescaledb` and hypertable creation. If extension is unavailable it gracefully continues on standard PostgreSQL.
+- **Reduced MBTA API usage:** prediction polling is now batched by direction (`2 calls/minute`) instead of one call per platform+direction.
+- **Frontend endpoint path:** frontend now defaults to `/api/v1/statistics` (configurable via `VITE_STATS_PATH`).
+- **Frontend container:** `frontend/Dockerfile` builds static assets and serves with NGINX for production-ready hosting behind ALB/CloudFront.
+
 ## Screenshots
 
 <img src="https://github.com/0GhOsTO/MBTAEstimation/blob/main/MBTAweb.png">
