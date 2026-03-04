@@ -260,7 +260,7 @@ function App() {
               </div>
               <div className="equation-line">
                 <LatexMath>
-                  {`\\text{Correct} = \\begin{cases} 1 & \\text{if } |\\text{Predicted} - \\text{Actual}| \\leq 3\\text{ min} \\\\\\\\ 0 & \\text{otherwise} \\end{cases}`}
+                  {`\\text{Correct} = \\begin{cases} 1 & \\text{if } |\\text{Predicted} - \\text{Actual}| \\leq 3\\text{ min} \\\\ 0 & \\text{otherwise} \\end{cases}`}
                 </LatexMath>
               </div>
             </div>
