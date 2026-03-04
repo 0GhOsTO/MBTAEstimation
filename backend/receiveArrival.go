@@ -41,6 +41,23 @@ var dynamicStopGeoLocation = make(map[string][2]float64)
 // dynamically store stop ID to parent station (place ID) mapping
 var stopToParentStation = make(map[string]string)
 
+// Canonical aliases so MBTA alternate IDs map to the same Green-B station keys used by frontend/backend stats.
+var canonicalStationAliases = map[string]string{
+	"place-babck": "70136", // Babcock Street
+	"170136":      "70136", // Babcock Street inbound platform variant
+	"170137":      "70136", // Babcock Street outbound platform variant
+	"place-amory": "70140", // Saint Paul Street (B) renamed in MBTA feeds
+	"170140":      "70140", // Amory Street inbound platform variant
+	"170141":      "70140", // Amory Street outbound platform variant
+}
+
+func normalizeStationKey(id string) string {
+	if canonical, ok := canonicalStationAliases[id]; ok {
+		return canonical
+	}
+	return id
+}
+
 // track which vehicle-stop pairs have already sent arrival notifications
 var vehicleStopArrivalSent = make(map[string]bool)
 
@@ -552,6 +569,7 @@ func fetchStopGeolocation(stopID string, client *http.Client) ([2]float64, error
 	if stopData.Data.Relationships.ParentStation.Data != nil {
 		parentStationID = stopData.Data.Relationships.ParentStation.Data.ID
 	}
+	parentStationID = normalizeStationKey(parentStationID)
 
 	mapMutex.Lock()
 	dynamicStopGeoLocation[stopID] = coords
@@ -884,6 +902,7 @@ func actualArrivalMoment(routeName string) {
 					if placeID == "" {
 						placeID = actualData.RelatedStop
 					}
+					placeID = normalizeStationKey(placeID)
 
 					arrivalInfo = ArrivalInfo{
 						StationPlaceID: placeID,
@@ -995,6 +1014,7 @@ func actualArrivalMoment(routeName string) {
 					if placeID == "" {
 						placeID = nextStopID // Fallback to stop ID if parent not found
 					}
+					placeID = normalizeStationKey(placeID)
 
 					arrivalInfo = ArrivalInfo{
 						StationPlaceID: placeID,

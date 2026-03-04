@@ -209,6 +209,7 @@ func fetchPrediction_single(stopID string, direction int, parentStationID string
 	if storageKey == "" {
 		storageKey = stopID
 	}
+	storageKey = normalizeStationKey(storageKey)
 
 	predictionMutex.Lock()
 	if predictionDataMap[storageKey] == nil {
@@ -765,9 +766,11 @@ func main() {
 			"70130": "place-harvd", "70131": "place-harvd", // Harvard Avenue
 			"70134": "place-brico", "70135": "place-brico", // Packards Corner
 			// Canonicalize orphan-platform station keys so both directions aggregate to one station ID.
-			"70136": "70136", "70137": "70136", // Babcock Street (orphan)
+			"70136": "70136", "70137": "70136", // Babcock Street (legacy/orphan IDs)
+			"170136": "70136", "170137": "70136", // Babcock Street current IDs
 			"70138": "70138", "70139": "70138", // Pleasant Street (orphan)
-			"70140": "70140", "70141": "70140", // Saint Paul Street (orphan)
+			"70140": "70140", "70141": "70140", // Saint Paul Street (legacy/orphan IDs)
+			"170140": "70140", "170141": "70140", // Amory Street current IDs (Saint Paul Street B)
 			"70142": "70142", "70143": "70142", // Boston University West (orphan)
 			"70144": "place-bucen", "70145": "place-bucen", // Boston University Central
 			"70146": "place-buest", "70147": "place-buest", // Boston University East
