@@ -205,16 +205,16 @@ var staticStopToParentStation = map[string]string{
 	"70131": "place-harvd", // Harvard Avenue
 	"70134": "place-brico", // Packards Corner
 	"70135": "place-brico", // Packards Corner
-	// Note: Stops 70136-70143 have no parent station in MBTA API
-	// They map to themselves as they are orphaned platforms
+	// Note: Stops 70136-70143 have no parent station in MBTA API.
+	// Canonicalize each orphan pair to a single station key so both directions aggregate together.
 	"70136": "70136",       // Babcock Street
-	"70137": "70137",       // Babcock Street
+	"70137": "70136",       // Babcock Street
 	"70138": "70138",       // Pleasant Street
-	"70139": "70139",       // Pleasant Street
+	"70139": "70138",       // Pleasant Street
 	"70140": "70140",       // Saint Paul Street (B)
-	"70141": "70141",       // Saint Paul Street (B)
+	"70141": "70140",       // Saint Paul Street (B)
 	"70142": "70142",       // Boston University West
-	"70143": "70143",       // Boston University West
+	"70143": "70142",       // Boston University West
 	"70144": "place-bucen", // Boston University Central
 	"70145": "place-bucen", // Boston University Central
 	"70146": "place-buest", // Boston University East

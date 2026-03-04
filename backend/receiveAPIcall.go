@@ -136,8 +136,9 @@ func init() {
 func fetchPrediction_single(stopID string, direction int, parentStationID string) (PredictionData, string, error) {
 	// constructing the request.
 	// stopID is the individual platform ID (e.g., "70106"), parentStationID is for storage (e.g., "place-lake")
-	// gets the next two predictions for the stop and direction, sorted by arrival time
-	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&sort=arrival_time&page[limit]=2", stopID, direction)
+	// Fetch predictions for Green-B only to avoid mixing with C/D/E trains on shared downtown platforms.
+	// Keep the same page limit for now to minimize API load while improving relevance.
+	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&filter[route]=Green-B&sort=arrival_time&page[limit]=2", stopID, direction)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
 		return PredictionData{}, "nil", err
@@ -763,10 +764,11 @@ func main() {
 			"70128": "place-grigg", "70129": "place-grigg", // Griggs Street
 			"70130": "place-harvd", "70131": "place-harvd", // Harvard Avenue
 			"70134": "place-brico", "70135": "place-brico", // Packards Corner
-			"70136": "70136", "70137": "70137", // Babcock Street (orphan)
-			"70138": "70138", "70139": "70139", // Pleasant Street (orphan)
-			"70140": "70140", "70141": "70141", // Saint Paul Street (orphan)
-			"70142": "70142", "70143": "70143", // Boston University West (orphan)
+			// Canonicalize orphan-platform station keys so both directions aggregate to one station ID.
+			"70136": "70136", "70137": "70136", // Babcock Street (orphan)
+			"70138": "70138", "70139": "70138", // Pleasant Street (orphan)
+			"70140": "70140", "70141": "70140", // Saint Paul Street (orphan)
+			"70142": "70142", "70143": "70142", // Boston University West (orphan)
 			"70144": "place-bucen", "70145": "place-bucen", // Boston University Central
 			"70146": "place-buest", "70147": "place-buest", // Boston University East
 			"70148": "place-bland", "70149": "place-bland", // Blandford Street

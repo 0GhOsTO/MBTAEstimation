@@ -149,6 +149,8 @@ const stationNameToID: { [key: string]: string } = {
   "Government Center": "place-gover",
 };
 
+const supportedLines = ['Green-B'] as const
+
 function App() {
   const [selectedLine, setSelectedLine] = useState('Green-B')
   const [inboundAccuracy, setInboundAccuracy] = useState(0)
@@ -245,6 +247,10 @@ function App() {
 
   const handleLineChange = (line: string) => {
     setSelectedLine(line)
+    const firstStation = stationsByLine[line]?.[0]?.name
+    if (firstStation) {
+      setSelectedStation(firstStation)
+    }
     addLog(`Switched to ${line}`)
   }
 
@@ -327,10 +333,9 @@ function App() {
               value={selectedLine} 
               onChange={(e) => handleLineChange(e.target.value)}
             >
-              <option value="Green-B">Green Line B</option>
-              <option value="Green-C">Green Line C</option>
-              <option value="Green-D">Green Line D</option>
-              <option value="Green-E">Green Line E</option>
+              {supportedLines.map((line) => (
+                <option key={line} value={line}>{line.replace('-', ' Line ')}</option>
+              ))}
             </select>
           </div>
           <div className="leaflet-map-container">
