@@ -45,9 +45,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Harvard Avenue", lat: 42.3502, lng: -71.1312 },
     { name: "Packards Corner", lat: 42.3519, lng: -71.1251 },
     { name: "Babcock Street", lat: 42.3513, lng: -71.1218 },
-    { name: "Pleasant Street", lat: 42.3513, lng: -71.1187 },
-    { name: "Saint Paul Street", lat: 42.3511, lng: -71.1157 },
-    { name: "BU West", lat: 42.3499, lng: -71.1138 },
+    { name: "Amory Street", lat: 42.3511, lng: -71.1157 },
     { name: "BU Central", lat: 42.3497, lng: -71.1070 },
     { name: "BU East", lat: 42.3496, lng: -71.1040 },
     { name: "Blandford Street", lat: 42.3493, lng: -71.1002 },
@@ -134,9 +132,7 @@ const stationNameToID: { [key: string]: string } = {
   "Harvard Avenue": "place-harvd",
   "Packards Corner": "place-brico",
   "Babcock Street": "70136",  // Orphan platform
-  "Pleasant Street": "70138",  // Orphan platform
-  "Saint Paul Street": "70140",  // Orphan platform
-  "BU West": "70142",  // Orphan platform
+  "Amory Street": "70140",  // Orphan platform
   "BU Central": "place-bucen",
   "BU East": "place-buest",
   "Blandford Street": "place-bland",
