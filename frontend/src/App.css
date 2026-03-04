@@ -201,6 +201,14 @@
   letter-spacing: 1px;
 }
 
+.direction-label {
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0 0;
+  opacity: 0.6;
+  font-weight: 300;
+  font-style: italic;
+}
+
 .prediction-count {
   font-size: 0.9rem;
   margin: 0.5rem 0 0 0;
@@ -548,6 +556,10 @@
     font-size: 1rem;
   }
 
+  .direction-label {
+    font-size: 0.75rem;
+  }
+
   .prediction-count {
     font-size: 0.8rem;
   }
@@ -706,6 +718,10 @@
 
   .accuracy-label {
     font-size: 0.9rem;
+  }
+
+  .direction-label {
+    font-size: 0.7rem;
   }
 
   .map-container {

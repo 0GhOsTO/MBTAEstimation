@@ -295,6 +295,7 @@ function App() {
                   </span>
                 </div>
                 <p className="accuracy-label">Inbound</p>
+                <p className="direction-label">to Government Center</p>
                 {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
               </div>
               <div className="accuracy-item">
@@ -304,6 +305,7 @@ function App() {
                   </span>
                 </div>
                 <p className="accuracy-label">Outbound</p>
+                <p className="direction-label">to Boston College</p>
                 {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
               </div>
             </div>
