@@ -769,9 +769,11 @@ func main() {
 			"70136": "70136", "70137": "70136", // Babcock Street (legacy/orphan IDs)
 			"170136": "70136", "170137": "70136", // Babcock Street current IDs
 			"70138": "70138", "70139": "70138", // Pleasant Street (orphan)
+			"170138": "70138", "170139": "70138", // Pleasant Street current IDs
 			"70140": "70140", "70141": "70140", // Saint Paul Street (legacy/orphan IDs)
 			"170140": "70140", "170141": "70140", // Amory Street current IDs (Saint Paul Street B)
 			"70142": "70142", "70143": "70142", // Boston University West (orphan)
+			"170142": "70142", "170143": "70142", // Boston University West current IDs
 			"70144": "place-bucen", "70145": "place-bucen", // Boston University Central
 			"70146": "place-buest", "70147": "place-buest", // Boston University East
 			"70148": "place-bland", "70149": "place-bland", // Blandford Street
