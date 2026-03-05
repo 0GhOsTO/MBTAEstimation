@@ -122,13 +122,13 @@ type PredictionsResponse struct {
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("?좑툘  No .env file found (this is normal in production)")
+		fmt.Println("No .env file found (this is normal in production)")
 	}
 	key = os.Getenv("MBTA_API_KEY")
 	if key == "" {
-		panic("??MBTA_API_KEY environment variable not set! Please set it in your deployment platform's environment variables.")
+		panic("MBTA_API_KEY environment variable not set! Please set it in your deployment platform's environment variables.")
 	}
-	fmt.Println("??MBTA API key loaded successfully")
+	fmt.Println("MBTA API key loaded successfully")
 }
 
 func fetchPrediction_single(stopID string, direction int, parentStationID string) (PredictionData, string, error) {
@@ -289,7 +289,7 @@ func cleanupOldPredictions() {
 	}
 
 	if cleanedCount > 0 {
-		fmt.Printf("?㏏ Cleaned up %d old predictions (older than 2 hours)\n", cleanedCount)
+		fmt.Printf("Cleaned up %d old predictions (older than 2 hours)\n", cleanedCount)
 	}
 }
 
@@ -529,9 +529,9 @@ func main() {
 		http.HandleFunc("/api/statistics", handleGetStatistics)
 		http.HandleFunc("/api/debug", handleDebug)
 		addr := "0.0.0.0:" + port
-		fmt.Printf("?뙋 HTTP API server starting on port %s (accessible at http://0.0.0.0:%s)\n", port, port)
+		fmt.Printf("HTTP API server starting on port %s (accessible at http://0.0.0.0:%s)\n", port, port)
 		if err := http.ListenAndServe(addr, nil); err != nil {
-			fmt.Printf("??HTTP server error: %v\n", err)
+			fmt.Printf("HTTP server error: %v\n", err)
 			panic(err) // Crash if server fails to start
 		}
 	}()
@@ -560,17 +560,17 @@ func main() {
 			backendURL = "http://localhost:" + port
 		}
 
-		fmt.Printf("?봽 Started keep-alive service (pinging %s every 14 minutes)...\n", backendURL)
+		fmt.Printf("Started keep-alive service (pinging %s every 14 minutes)...\n", backendURL)
 
 		for {
 			<-keepAliveTicker.C
 			// Make a lightweight GET request to keep the server active
 			resp, err := http.Get(backendURL + "/api/statistics")
 			if err != nil {
-				fmt.Printf("?좑툘  Keep-alive ping failed: %v\n", err)
+				fmt.Printf("Keep-alive ping failed: %v\n", err)
 			} else {
 				resp.Body.Close()
-				fmt.Printf("??Keep-alive ping successful at %s\n", time.Now().Format(time.RFC3339))
+				fmt.Printf("Keep-alive ping successful at %s\n", time.Now().Format(time.RFC3339))
 			}
 		}
 	}()
@@ -841,19 +841,19 @@ func main() {
 		fetchForPlatform := func(platformID, parentID string) {
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("?좑툘  Recovered from panic in fetchPrediction_single for platform %s: %v\n", platformID, r)
+					fmt.Printf("Recovered from panic in fetchPrediction_single for platform %s: %v\n", platformID, r)
 				}
 			}()
 
 			// Fetch both directions
 			if _, _, err := fetchPrediction_single(platformID, 0, parentID); err != nil {
 				if err.Error() != "no predictions available" {
-					fmt.Printf("?좑툘  Error fetching prediction for platform %s direction 0: %v\n", platformID, err)
+					fmt.Printf("Error fetching prediction for platform %s direction 0: %v\n", platformID, err)
 				}
 			}
 			if _, _, err := fetchPrediction_single(platformID, 1, parentID); err != nil {
 				if err.Error() != "no predictions available" {
-					fmt.Printf("?좑툘  Error fetching prediction for platform %s direction 1: %v\n", platformID, err)
+					fmt.Printf("Error fetching prediction for platform %s direction 1: %v\n", platformID, err)
 				}
 			}
 		}
