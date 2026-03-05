@@ -122,13 +122,13 @@ type PredictionsResponse struct {
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("⚠️  No .env file found (this is normal in production)")
+		fmt.Println("?좑툘  No .env file found (this is normal in production)")
 	}
 	key = os.Getenv("MBTA_API_KEY")
 	if key == "" {
-		panic("❌ MBTA_API_KEY environment variable not set! Please set it in your deployment platform's environment variables.")
+		panic("??MBTA_API_KEY environment variable not set! Please set it in your deployment platform's environment variables.")
 	}
-	fmt.Println("✅ MBTA API key loaded successfully")
+	fmt.Println("??MBTA API key loaded successfully")
 }
 
 func fetchPrediction_single(stopID string, direction int, parentStationID string) (PredictionData, string, error) {
@@ -225,7 +225,7 @@ func fetchPrediction_single(stopID string, direction int, parentStationID string
 				predictionDataMap[storageKey][direction][pred.VehicleID],
 				pred,
 			)
-			fmt.Printf("Stored prediction: Platform %s → Station %s, Dir %d, Vehicle %s (Arrival: %v)\n",
+			debugf("Stored prediction: Platform %s Station %s, Dir %d, Vehicle %s (Arrival: %v)\n",
 				stopID, storageKey, direction, pred.VehicleID, pred.ArrivalTime)
 			storedCount++
 		}
@@ -289,7 +289,7 @@ func cleanupOldPredictions() {
 	}
 
 	if cleanedCount > 0 {
-		fmt.Printf("🧹 Cleaned up %d old predictions (older than 2 hours)\n", cleanedCount)
+		fmt.Printf("?㏏ Cleaned up %d old predictions (older than 2 hours)\n", cleanedCount)
 	}
 }
 
@@ -332,7 +332,7 @@ func initializeStationMaps() {
 		}
 	}
 
-	fmt.Printf("✅ Initialized accuracy maps for %d Green-B stations\n", len(greenBStationNames))
+	fmt.Printf("??Initialized accuracy maps for %d Green-B stations\n", len(greenBStationNames))
 }
 
 // Update cached accuracy for a specific station (call this after updating stats)
@@ -371,7 +371,7 @@ func updateCachedAccuracy(stationID string) {
 	}
 
 	// Debug log to verify cache update
-	fmt.Printf("🔄 Updated cache for %s: Inbound=%.2f%% (%d total), Outbound=%.2f%% (%d total)\n",
+	debugf("Updated cache for %s: Inbound=%.2f%% (%d total), Outbound=%.2f%% (%d total)\n",
 		stationID, cached.InboundAccuracy, cached.InboundTotal, cached.OutboundAccuracy, cached.OutboundTotal)
 }
 
@@ -452,12 +452,12 @@ func handleGetStatistics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Debug log to show what we're returning
-	fmt.Printf("📤 /api/statistics called: Returning %d stations (%d with data)\n", len(response), nonZeroCount)
+	debugf("/api/statistics called: Returning %d stations (%d with data)\n", len(response), nonZeroCount)
 	if nonZeroCount > 0 {
 		// Show first station with non-zero data for debugging
 		for _, station := range response {
 			if station.InboundTotal > 0 || station.OutboundTotal > 0 {
-				fmt.Printf("   Sample: %s (%s) - In: %.2f%% (%d), Out: %.2f%% (%d)\n",
+				debugf("Sample: %s (%s) - In: %.2f%% (%d), Out: %.2f%% (%d)\n",
 					station.StationID, station.StationName,
 					station.InboundAccuracy, station.InboundTotal,
 					station.OutboundAccuracy, station.OutboundTotal)
@@ -529,9 +529,9 @@ func main() {
 		http.HandleFunc("/api/statistics", handleGetStatistics)
 		http.HandleFunc("/api/debug", handleDebug)
 		addr := "0.0.0.0:" + port
-		fmt.Printf("🌐 HTTP API server starting on port %s (accessible at http://0.0.0.0:%s)\n", port, port)
+		fmt.Printf("?뙋 HTTP API server starting on port %s (accessible at http://0.0.0.0:%s)\n", port, port)
 		if err := http.ListenAndServe(addr, nil); err != nil {
-			fmt.Printf("❌ HTTP server error: %v\n", err)
+			fmt.Printf("??HTTP server error: %v\n", err)
 			panic(err) // Crash if server fails to start
 		}
 	}()
@@ -560,52 +560,109 @@ func main() {
 			backendURL = "http://localhost:" + port
 		}
 
-		fmt.Printf("🔄 Started keep-alive service (pinging %s every 14 minutes)...\n", backendURL)
+		fmt.Printf("?봽 Started keep-alive service (pinging %s every 14 minutes)...\n", backendURL)
 
 		for {
 			<-keepAliveTicker.C
 			// Make a lightweight GET request to keep the server active
 			resp, err := http.Get(backendURL + "/api/statistics")
 			if err != nil {
-				fmt.Printf("⚠️  Keep-alive ping failed: %v\n", err)
+				fmt.Printf("?좑툘  Keep-alive ping failed: %v\n", err)
 			} else {
 				resp.Body.Close()
-				fmt.Printf("✅ Keep-alive ping successful at %s\n", time.Now().Format(time.RFC3339))
+				fmt.Printf("??Keep-alive ping successful at %s\n", time.Now().Format(time.RFC3339))
 			}
 		}
 	}()
 
-	// Reset statistics every 24 hours to show recent accuracy
+	// Reset statistics daily at 3:30 AM America/New_York.
 	go func() {
-		resetTicker := time.NewTicker(24 * time.Hour)
-		defer resetTicker.Stop()
-		fmt.Println("📊 Started daily statistics reset (every 24 hours)...")
+		location, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			fmt.Printf("Warning: Could not load America/New_York timezone, falling back to local time: %v\n", err)
+			location = time.Local
+		}
 
-		for {
-			<-resetTicker.C
+		resetStats := func() {
+			// Flush prediction cache.
+			predictionMutex.Lock()
+			predictionStations := len(predictionDataMap)
+			predictionDataMap = make(map[string]map[int]map[string][]PredictionData)
+			predictionMutex.Unlock()
+
+			// Flush runtime vehicle/stop caches.
+			mapMutex.Lock()
+			vehicleCount := len(actualTrainInfo)
+			nextStopCount := len(vehicleNextStop)
+			dynamicStopCount := len(dynamicStopGeoLocation)
+			stopParentCount := len(stopToParentStation)
+			arrivalSentCount := len(vehicleStopArrivalSent)
+
+			actualTrainInfo = make(map[string]ActualData)
+			vehicleNextStop = make(map[string]string)
+			dynamicStopGeoLocation = make(map[string][2]float64)
+			stopToParentStation = make(map[string]string)
+			vehicleStopArrivalSent = make(map[string]bool)
+			mapMutex.Unlock()
+
+			// Drain queued arrivals so old events are not graded after reset.
+			drainedArrivals := 0
+			for {
+				select {
+				case <-ArrivalChannel:
+					drainedArrivals++
+				default:
+					goto drained
+				}
+			}
+		drained:
+
+			// Flush accuracy stats/cache.
 			statsMutex.Lock()
-
-			// Count total predictions before reset
 			totalPredictions := 0
 			for _, directions := range stationAccuracyMap {
 				for _, stats := range directions {
 					totalPredictions += stats.Total
 				}
 			}
-
-			// Reset all station statistics
-			for stationID := range stationAccuracyMap {
-				for direction := range stationAccuracyMap[stationID] {
-					stationAccuracyMap[stationID][direction] = &StationStats{}
-				}
-			}
-
-			// Clear cached accuracy data
+			stationAccuracyMap = make(map[string]map[int]*StationStats)
 			cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
-
 			statsMutex.Unlock()
-			fmt.Printf("📊 Statistics reset completed at %s - Cleared %d predictions from last 24h\n",
-				time.Now().Format(time.RFC3339), totalPredictions)
+
+			fmt.Printf("Full in-memory reset completed at %s | predictionStations=%d totalPredictions=%d vehicles=%d nextStops=%d dynamicStops=%d stopParents=%d arrivalSent=%d drainedArrivals=%d\n",
+				time.Now().In(location).Format(time.RFC3339),
+				predictionStations,
+				totalPredictions,
+				vehicleCount,
+				nextStopCount,
+				dynamicStopCount,
+				stopParentCount,
+				arrivalSentCount,
+				drainedArrivals,
+			)
+		}
+
+		now := time.Now().In(location)
+		nextReset := time.Date(now.Year(), now.Month(), now.Day(), 3, 30, 0, 0, location)
+		if !now.Before(nextReset) {
+			nextReset = nextReset.Add(24 * time.Hour)
+		}
+		initialWait := nextReset.Sub(now)
+
+		fmt.Printf("Started daily statistics reset at 03:30 (%s). First reset in %s at %s\n",
+			location.String(), initialWait.Round(time.Second), nextReset.Format(time.RFC3339))
+
+		timer := time.NewTimer(initialWait)
+		defer timer.Stop()
+
+		<-timer.C
+		resetStats()
+
+		resetTicker := time.NewTicker(24 * time.Hour)
+		defer resetTicker.Stop()
+		for {
+			<-resetTicker.C
+			resetStats()
 		}
 	}()
 
@@ -618,23 +675,23 @@ func main() {
 		fmt.Println("Started listening to ArrivalChannel...")
 		// this is equivalent to <-Arrival Channel.
 		for arrival := range ArrivalChannel {
-			fmt.Printf("\n=== TRAIN ARRIVAL DETECTED ===\n")
-			fmt.Printf("Station (Place ID): %s\n", arrival.StationPlaceID)
-			fmt.Printf("Station (Stop ID): %s\n", arrival.StationStopID)
-			fmt.Printf("Train ID: %s\n", arrival.TrainID)
-			fmt.Printf("Direction: %d\n", arrival.Direction)
-			fmt.Printf("Actual Arrival Time: %s\n", arrival.ArrivalTime.Format(time.RFC3339))
-			fmt.Printf("==============================\n\n")
+			debugln("\n=== TRAIN ARRIVAL DETECTED ===")
+			debugf("Station (Place ID): %s\n", arrival.StationPlaceID)
+			debugf("Station (Stop ID): %s\n", arrival.StationStopID)
+			debugf("Train ID: %s\n", arrival.TrainID)
+			debugf("Direction: %d\n", arrival.Direction)
+			debugf("Actual Arrival Time: %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+			debugln("==============================")
 
 			// Compare with prediction data and score accuracy
 			// Use StationPlaceID (parent station) to match how predictions are stored
 			predictionMutex.RLock()
-			fmt.Printf("Looking up predictions for Place ID: %s, Direction: %d, Train: %s\n", arrival.StationPlaceID, arrival.Direction, arrival.TrainID)
+			debugf("Looking up predictions for Place ID: %s, Direction: %d, Train: %s\n", arrival.StationPlaceID, arrival.Direction, arrival.TrainID)
 
 			// Debug: Show what's in predictionDataMap for this station
 			if stationPreds, hasStation := predictionDataMap[arrival.StationPlaceID]; hasStation {
 				if dirPreds, hasDir := stationPreds[arrival.Direction]; hasDir {
-					fmt.Printf("  Found direction %d data with %d vehicles: %v\n", arrival.Direction, len(dirPreds), func() []string {
+					debugf("  Found direction %d data with %d vehicles: %v\n", arrival.Direction, len(dirPreds), func() []string {
 						keys := make([]string, 0, len(dirPreds))
 						for k := range dirPreds {
 							keys = append(keys, k)
@@ -642,14 +699,14 @@ func main() {
 						return keys
 					}())
 				} else {
-					fmt.Printf("  No predictions for direction %d\n", arrival.Direction)
+					debugf("  No predictions for direction %d\n", arrival.Direction)
 				}
 			} else {
-				fmt.Printf("  No predictions stored for station %s\n", arrival.StationPlaceID)
+				debugf("  No predictions stored for station %s\n", arrival.StationPlaceID)
 			}
 
 			if predictions, exists := predictionDataMap[arrival.StationPlaceID][arrival.Direction][arrival.TrainID]; exists {
-				fmt.Printf("Found %d prediction(s) for this train:\n", len(predictions))
+				debugf("Found %d prediction(s) for this train:\n", len(predictions))
 				targetObservationTime := arrival.ArrivalTime.Add(-5 * time.Minute)
 				gradedCount := 0
 				correctCount := 0
@@ -669,12 +726,12 @@ func main() {
 					diffSeconds := difference.Seconds()
 					diffMinutes := difference.Minutes()
 
-					fmt.Printf("\nGraded prediction #%d (observed <= arrival-5m):\n", i+1)
-					fmt.Printf("  Snapshot Time:     %s\n", pred.ObservationTime.Format(time.RFC3339))
-					fmt.Printf("  Target Time:       %s\n", targetObservationTime.Format(time.RFC3339))
-					fmt.Printf("  Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
-					fmt.Printf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
-					fmt.Printf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
+					debugf("\nGraded prediction #%d (observed <= arrival-5m):\n", i+1)
+					debugf("  Snapshot Time:     %s\n", pred.ObservationTime.Format(time.RFC3339))
+					debugf("  Target Time:       %s\n", targetObservationTime.Format(time.RFC3339))
+					debugf("  Predicted Arrival: %s\n", pred.ArrivalTime.Format(time.RFC3339))
+					debugf("  Actual Arrival:    %s\n", arrival.ArrivalTime.Format(time.RFC3339))
+					debugf("  Difference:        %.0f seconds (%.2f minutes)\n", diffSeconds, diffMinutes)
 
 					isCorrect := math.Abs(diffMinutes) <= 3
 					if isCorrect {
@@ -685,11 +742,11 @@ func main() {
 					gradedCount++
 
 					if diffSeconds > 0 {
-						fmt.Printf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
+						debugf("  Status:            Train arrived %.2f minutes LATE\n", diffMinutes)
 					} else if diffSeconds < 0 {
-						fmt.Printf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
+						debugf("  Status:            Train arrived %.2f minutes EARLY\n", math.Abs(diffMinutes))
 					} else {
-						fmt.Printf("  Status:            Train arrived EXACTLY on time!\n")
+						debugln("  Status:            Train arrived EXACTLY on time!")
 					}
 				}
 
@@ -713,14 +770,14 @@ func main() {
 					if arrival.Direction == 1 {
 						directionName = "Inbound"
 					}
-					fmt.Printf("\nSTATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
-					fmt.Printf("   Total Predictions: %d\n", stats.Total)
-					fmt.Printf("   Correct (<=3 min): %d\n", stats.Correct)
-					fmt.Printf("   Wrong (>3 min):   %d\n", stats.Incorrect)
-					fmt.Printf("   Accuracy Rate:    %.2f%%\n", accuracy)
+					debugf("\nSTATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
+					debugf("   Total Predictions: %d\n", stats.Total)
+					debugf("   Correct (<=3 min): %d\n", stats.Correct)
+					debugf("   Wrong (>3 min):   %d\n", stats.Incorrect)
+					debugf("   Accuracy Rate:    %.2f%%\n", accuracy)
 					statsMutex.Unlock()
 				} else {
-					fmt.Println("No predictions observed at least 5 minutes before arrival")
+					debugln("No predictions observed at least 5 minutes before arrival")
 				}
 				// Cleanup: Remove evaluated predictions to prevent memory leak
 				predictionMutex.RUnlock()
@@ -733,13 +790,13 @@ func main() {
 					delete(predictionDataMap, arrival.StationPlaceID)
 				}
 				predictionMutex.Unlock()
-				fmt.Printf("Cleaned up predictions for vehicle %s at station %s\n", arrival.TrainID, arrival.StationPlaceID)
+				debugf("Cleaned up predictions for vehicle %s at station %s\n", arrival.TrainID, arrival.StationPlaceID)
 			} else {
-				fmt.Println("No predictions found for this train arrival")
+				debugln("No predictions found for this train arrival")
 				predictionMutex.RUnlock()
 			}
 
-			fmt.Println("\n==============================")
+			debugln("\n==============================")
 		}
 	}()
 
@@ -747,7 +804,7 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
-		fmt.Println("Started periodic prediction fetching (every 1 minutes)...")
+		debugln("Started periodic prediction fetching (every 1 minutes)...")
 
 		// Map of platform stops to their parent stations
 		// Format: platformID -> parentStationID
@@ -784,25 +841,25 @@ func main() {
 		fetchForPlatform := func(platformID, parentID string) {
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("⚠️  Recovered from panic in fetchPrediction_single for platform %s: %v\n", platformID, r)
+					fmt.Printf("?좑툘  Recovered from panic in fetchPrediction_single for platform %s: %v\n", platformID, r)
 				}
 			}()
 
 			// Fetch both directions
 			if _, _, err := fetchPrediction_single(platformID, 0, parentID); err != nil {
 				if err.Error() != "no predictions available" {
-					fmt.Printf("⚠️  Error fetching prediction for platform %s direction 0: %v\n", platformID, err)
+					fmt.Printf("?좑툘  Error fetching prediction for platform %s direction 0: %v\n", platformID, err)
 				}
 			}
 			if _, _, err := fetchPrediction_single(platformID, 1, parentID); err != nil {
 				if err.Error() != "no predictions available" {
-					fmt.Printf("⚠️  Error fetching prediction for platform %s direction 1: %v\n", platformID, err)
+					fmt.Printf("?좑툘  Error fetching prediction for platform %s direction 1: %v\n", platformID, err)
 				}
 			}
 		}
 
 		// Fetch predictions immediately on startup
-		fmt.Println("Fetching initial predictions for all platforms...")
+		debugln("Fetching initial predictions for all platforms...")
 		for platformID, parentID := range platformToParent {
 			go fetchForPlatform(platformID, parentID)
 		}
@@ -810,7 +867,7 @@ func main() {
 		// Then continue with periodic updates
 		for {
 			<-ticker.C
-			fmt.Println("Fetching updated predictions...")
+			debugln("Fetching updated predictions...")
 			for platformID, parentID := range platformToParent {
 				go fetchForPlatform(platformID, parentID)
 			}

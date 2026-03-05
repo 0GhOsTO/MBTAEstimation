@@ -568,7 +568,7 @@ func fetchStopGeolocation(stopID string, client *http.Client) ([2]float64, error
 	stopToParentStation[stopID] = parentStationID
 	mapMutex.Unlock()
 
-	fmt.Printf("Fetched geolocation for stop %s (parent: %s): [%.5f, %.5f]\n", stopID, parentStationID, coords[0], coords[1])
+	debugf("Fetched geolocation for stop %s (parent: %s): [%.5f, %.5f]\n", stopID, parentStationID, coords[0], coords[1])
 	return coords, nil
 }
 
@@ -622,7 +622,7 @@ func actualArrivalMoment(routeName string) {
 		for _, vehicle := range vehiclesResp.Data {
 			// Skip vehicles with missing/empty IDs to avoid corrupting maps
 			if vehicle.ID == "" {
-				fmt.Println("Skipping vehicle with empty ID in actualTrainInfo update")
+				debugln("Skipping vehicle with empty ID in actualTrainInfo update")
 				continue
 			}
 			observationTime, err := time.Parse(time.RFC3339, vehicle.Attributes.UpdatedAt)
@@ -656,7 +656,7 @@ func actualArrivalMoment(routeName string) {
 			mapMutex.Unlock()
 		}
 
-		fmt.Printf("Updated %d vehicles in actualTrainInfo\n", len(vehiclesResp.Data))
+		debugf("Updated %d vehicles in actualTrainInfo\n", len(vehiclesResp.Data))
 
 		// CLEANING THE STALE RESPONSE.
 		currentVehicleIDs := make(map[string]bool)
@@ -680,7 +680,7 @@ func actualArrivalMoment(routeName string) {
 					}
 				}
 				staleVehicles = append(staleVehicles, vehicleID)
-				fmt.Printf("Cleaned up stale vehicle: %s\n", vehicleID)
+				debugf("Cleaned up stale vehicle: %s\n", vehicleID)
 			}
 		}
 		mapMutex.Unlock()
@@ -693,7 +693,7 @@ func actualArrivalMoment(routeName string) {
 					for direction := range predictionDataMap[stopID] {
 						if _, exists := predictionDataMap[stopID][direction][vehicleID]; exists {
 							delete(predictionDataMap[stopID][direction], vehicleID)
-							fmt.Printf("Cleaned up predictions for stale vehicle %s at stop %s direction %d\n", vehicleID, stopID, direction)
+							debugf("Cleaned up predictions for stale vehicle %s at stop %s direction %d\n", vehicleID, stopID, direction)
 						}
 					}
 				}
@@ -706,7 +706,7 @@ func actualArrivalMoment(routeName string) {
 		for _, vehicle := range vehiclesResp.Data {
 			// Skip vehicles with missing/empty IDs
 			if vehicle.ID == "" {
-				fmt.Println("Skipping vehicle with empty ID in next-stop update")
+				debugln("Skipping vehicle with empty ID in next-stop update")
 				continue
 			}
 			currentStatus := vehicle.Attributes.CurrentStatus
@@ -732,7 +732,7 @@ func actualArrivalMoment(routeName string) {
 					)
 					withinRadius = distance <= 40.0
 					if withinRadius {
-						fmt.Printf("Vehicle %s still within 40m of next stop %s (%.2fm) - not updating\n",
+						debugf("Vehicle %s still within 40m of next stop %s (%.2fm) - not updating\n",
 							vehicle.ID, existingNextStop, distance)
 					}
 				}
@@ -750,13 +750,13 @@ func actualArrivalMoment(routeName string) {
 						mapMutex.Lock()
 						vehicleNextStop[vehicle.ID] = vehicle.Relationships.Stop.Data.ID
 						mapMutex.Unlock()
-						fmt.Printf("Vehicle %s (status: %s) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
+						debugf("Vehicle %s (status: %s) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
 					} else {
 						// No stop relationship - clear stale entry
 						mapMutex.Lock()
 						delete(vehicleNextStop, vehicle.ID)
 						mapMutex.Unlock()
-						fmt.Printf("Vehicle %s (status: %s) has no stop relationship - clearing next stop\n", vehicle.ID, currentStatus)
+						debugf("Vehicle %s (status: %s) has no stop relationship - clearing next stop\n", vehicle.ID, currentStatus)
 					}
 				} else if currentStatus == "STOPPED_AT" {
 					// Vehicle is stopped, need to find next stop using predictions
@@ -807,14 +807,14 @@ func actualArrivalMoment(routeName string) {
 							for _, pred := range tripData.Data {
 								if pred.Relationships.Stop.Data.ID == currentStopID {
 									currentStopSeq = pred.Attributes.StopSequence
-									fmt.Printf("Vehicle %s: Inferred stop_sequence=%d from stop_id=%s\n", vehicle.ID, currentStopSeq, currentStopID)
+									debugf("Vehicle %s: Inferred stop_sequence=%d from stop_id=%s\n", vehicle.ID, currentStopSeq, currentStopID)
 									break
 								}
 							}
 						}
 
 						if currentStopSeq < 0 {
-							fmt.Printf("Vehicle %s STOPPED_AT but can't determine stop_sequence; skipping update\n", vehicle.ID)
+							debugf("Vehicle %s STOPPED_AT but can't determine stop_sequence; skipping update\n", vehicle.ID)
 							continue
 						}
 
@@ -831,12 +831,12 @@ func actualArrivalMoment(routeName string) {
 							mapMutex.Lock()
 							vehicleNextStop[vehicle.ID] = nextStop
 							mapMutex.Unlock()
-							fmt.Printf("Vehicle %s (status: %s) next stop after current: %s\n", vehicle.ID, currentStatus, nextStop)
+							debugf("Vehicle %s (status: %s) next stop after current: %s\n", vehicle.ID, currentStatus, nextStop)
 						} else {
-							fmt.Printf("Vehicle %s (status: %s) could not determine next stop\n", vehicle.ID, currentStatus)
+							debugf("Vehicle %s (status: %s) could not determine next stop\n", vehicle.ID, currentStatus)
 						}
 					} else {
-						fmt.Printf("Vehicle %s (status: %s) has no trip data\n", vehicle.ID, currentStatus)
+						debugf("Vehicle %s (status: %s) has no trip data\n", vehicle.ID, currentStatus)
 					}
 				} else {
 					// Handle other statuses by treating them like IN_TRANSIT_TO if a stop relationship exists
@@ -844,9 +844,9 @@ func actualArrivalMoment(routeName string) {
 						mapMutex.Lock()
 						vehicleNextStop[vehicle.ID] = vehicle.Relationships.Stop.Data.ID
 						mapMutex.Unlock()
-						fmt.Printf("Vehicle %s (status: %s - treating as approaching) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
+						debugf("Vehicle %s (status: %s - treating as approaching) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
 					} else {
-						fmt.Printf("Vehicle %s (status: %s) has no stop relationship\n", vehicle.ID, currentStatus)
+						debugf("Vehicle %s (status: %s) has no stop relationship\n", vehicle.ID, currentStatus)
 					}
 				}
 			}
@@ -910,7 +910,7 @@ func actualArrivalMoment(routeName string) {
 				mapMutex.Unlock()
 
 				if shouldSendArrival {
-					fmt.Printf("[STOPPED_AT %s, %s, %s, Direction: %d] - Vehicle arrived at stop %s\n",
+					debugf("[STOPPED_AT %s, %s, %s, Direction: %d] - Vehicle arrived at stop %s\n",
 						arrivalInfo.StationPlaceID,
 						arrivalInfo.TrainID,
 						arrivalInfo.ArrivalTime.Format(time.RFC3339),
@@ -922,7 +922,7 @@ func actualArrivalMoment(routeName string) {
 					sent := false
 					select {
 					case ArrivalChannel <- arrivalInfo:
-						fmt.Printf("Sent arrival info to channel (STOPPED_AT): %+v\n", arrivalInfo)
+						debugf("Sent arrival info to channel (STOPPED_AT): %+v\n", arrivalInfo)
 						sent = true
 					default:
 						fmt.Println("Warning: Arrival channel full, dropping STOPPED_AT message")
@@ -1029,7 +1029,7 @@ func actualArrivalMoment(routeName string) {
 
 			// Perform logging and channel send outside of the lock
 			if shouldSendArrival {
-				fmt.Printf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
+				debugf("[%s, %s, %s, Direction: %d] - Vehicle arriving (distance: %.2fm)\n",
 					arrivalInfo.StationPlaceID,
 					arrivalInfo.TrainID,
 					arrivalInfo.ArrivalTime.Format(time.RFC3339),
@@ -1041,7 +1041,7 @@ func actualArrivalMoment(routeName string) {
 				sent := false
 				select {
 				case ArrivalChannel <- arrivalInfo:
-					fmt.Printf("Sent arrival info to channel: %+v\n", arrivalInfo)
+					debugf("Sent arrival info to channel: %+v\n", arrivalInfo)
 					sent = true
 				default:
 					fmt.Println("Warning: Arrival channel full, dropping message")
