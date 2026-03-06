@@ -9,7 +9,7 @@ This project tracks and displays the trustworthiness of MBTA (Massachusetts Bay 
 ## Project Origin
 
 Being students at Boston University, the MBTA's green line is a significant mode of transportation, allowing for convenient travel and flexibility in planning trips. However, the stations running through the heart of Commonwealth Ave are notorious for delays (from traffic, construction, weather etc.), where students can be left stranded at stops waiting for a train that was supposed to arrive minutes ago. A problem especially during the winter months, where the temperatures can get uncomfortably cold. The MBTA posts timetables for scheduled arrivals for different stops, but sometimes that isn't enough. Our web app addresses that problem. We propose a metric called **trustworthiness score** to quantify how accurate predictions for train arrivals really are, and better inform our peers who frequent the B-Line.
-Here: [Reddit discussion about this issue](https://www.reddit.com/r/BostonU/comments/1rlqm5g/i_got_tired_of_waiting_for_the_green_line_so_i/)
+Here: [Reddit discussion about this issue & conversation about our website](https://www.reddit.com/r/BostonU/comments/1rlqm5g/i_got_tired_of_waiting_for_the_green_line_so_i/)
 
 ## What is Trustworthiness Score?
 
