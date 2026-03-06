@@ -933,27 +933,6 @@ func actualArrivalMoment(routeName string) {
 						vehicleStopArrivalSent[arrivalKeyToMark] = true
 						mapMutex.Unlock()
 					}
-				} else {
-					// If already sent and vehicle has moved far from the RelatedStop, clear tracking
-					// This allows future arrivals at different stops to be detected
-					if actualData.RelatedStop != "" {
-						stopCoords, err := fetchStopGeolocation(actualData.RelatedStop, client)
-						if err == nil {
-							distance := haversineDistance(
-								actualData.Latitude, actualData.Longitude,
-								stopCoords[0], stopCoords[1],
-							)
-							if distance > 40.0 {
-								mapMutex.Lock()
-								for key := range vehicleStopArrivalSent {
-									if strings.HasPrefix(key, vehicleID+"-") {
-										delete(vehicleStopArrivalSent, key)
-									}
-								}
-								mapMutex.Unlock()
-							}
-						}
-					}
 				}
 
 				// STOPPED_AT vehicles don't use distance-based detection; skip to next vehicle

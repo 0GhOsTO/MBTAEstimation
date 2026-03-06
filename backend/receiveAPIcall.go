@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -42,6 +43,10 @@ var statsMutex sync.Mutex
 // Cached accuracy rates for quick API responses
 // Map structure: stationID -> StationAccuracyResponse (with calculated accuracy)
 var cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
+
+// Most recent arrival prediction difference by station and direction.
+// Map structure: stationID -> direction (0=outbound, 1=inbound) -> diff metadata
+var stationRecentDiffMap = make(map[string]map[int]*RecentPredictionDiff)
 
 // Map of all Green Line B station IDs to friendly names
 var greenBStationNames = map[string]string{
@@ -295,12 +300,62 @@ func cleanupOldPredictions() {
 
 // StationAccuracyResponse represents the JSON response for station accuracy data
 type StationAccuracyResponse struct {
-	StationID        string  `json:"station_id"`
-	StationName      string  `json:"station_name"`
-	InboundAccuracy  float64 `json:"inbound_accuracy"`
-	InboundTotal     int     `json:"inbound_total"`
-	OutboundAccuracy float64 `json:"outbound_accuracy"`
-	OutboundTotal    int     `json:"outbound_total"`
+	StationID                 string   `json:"station_id"`
+	StationName               string   `json:"station_name"`
+	InboundAccuracy           float64  `json:"inbound_accuracy"`
+	InboundTotal              int      `json:"inbound_total"`
+	OutboundAccuracy          float64  `json:"outbound_accuracy"`
+	OutboundTotal             int      `json:"outbound_total"`
+	InboundRecentDiffMinutes  *float64 `json:"inbound_recent_diff_minutes"`
+	OutboundRecentDiffMinutes *float64 `json:"outbound_recent_diff_minutes"`
+}
+
+// RecentPredictionDiff stores the latest arrival-vs-prediction delta for a station/direction.
+type RecentPredictionDiff struct {
+	DifferenceMinutes         float64
+	ArrivalTime               time.Time
+	PredictionObservationTime time.Time
+	PredictionArrivalTime     time.Time
+	TrainID                   string
+}
+
+// selectMiddlePrediction chooses the middle prediction by observation time.
+// For even counts, it selects the older of the two middle entries.
+func selectMiddlePrediction(predictions []PredictionData, arrivalTime time.Time) (PredictionData, bool) {
+	valid := make([]PredictionData, 0, len(predictions))
+	for _, pred := range predictions {
+		if pred.ArrivalTime == nil {
+			continue
+		}
+		// Ignore snapshots observed after actual arrival when possible.
+		if pred.ObservationTime.After(arrivalTime) {
+			continue
+		}
+		valid = append(valid, pred)
+	}
+
+	// Fallback: if all snapshots are after actual arrival, still use available predictions.
+	if len(valid) == 0 {
+		for _, pred := range predictions {
+			if pred.ArrivalTime != nil {
+				valid = append(valid, pred)
+			}
+		}
+	}
+
+	if len(valid) == 0 {
+		return PredictionData{}, false
+	}
+
+	sort.Slice(valid, func(i, j int) bool {
+		if valid[i].ObservationTime.Equal(valid[j].ObservationTime) {
+			return valid[i].ArrivalTime.Before(*valid[j].ArrivalTime)
+		}
+		return valid[i].ObservationTime.Before(valid[j].ObservationTime)
+	})
+
+	middleIndex := (len(valid) - 1) / 2
+	return valid[middleIndex], true
 }
 
 // Initialize all Green-B stations with zero values in the accuracy maps
@@ -323,12 +378,14 @@ func initializeStationMaps() {
 
 		// Initialize cached accuracy response for this station
 		cachedAccuracyMap[stationID] = &StationAccuracyResponse{
-			StationID:        stationID,
-			StationName:      stationName,
-			InboundAccuracy:  0.0,
-			InboundTotal:     0,
-			OutboundAccuracy: 0.0,
-			OutboundTotal:    0,
+			StationID:                 stationID,
+			StationName:               stationName,
+			InboundAccuracy:           0.0,
+			InboundTotal:              0,
+			OutboundAccuracy:          0.0,
+			OutboundTotal:             0,
+			InboundRecentDiffMinutes:  nil,
+			OutboundRecentDiffMinutes: nil,
 		}
 	}
 
@@ -368,6 +425,25 @@ func updateCachedAccuracy(stationID string) {
 		} else {
 			cached.OutboundAccuracy = 0.0
 		}
+	}
+
+	// Update most recent arrival prediction difference (direction 1 = inbound)
+	if dirData, exists := stationRecentDiffMap[stationID]; exists {
+		if recent, hasInbound := dirData[1]; hasInbound && recent != nil {
+			diff := recent.DifferenceMinutes
+			cached.InboundRecentDiffMinutes = &diff
+		} else {
+			cached.InboundRecentDiffMinutes = nil
+		}
+		if recent, hasOutbound := dirData[0]; hasOutbound && recent != nil {
+			diff := recent.DifferenceMinutes
+			cached.OutboundRecentDiffMinutes = &diff
+		} else {
+			cached.OutboundRecentDiffMinutes = nil
+		}
+	} else {
+		cached.InboundRecentDiffMinutes = nil
+		cached.OutboundRecentDiffMinutes = nil
 	}
 
 	// Debug log to verify cache update
@@ -626,6 +702,7 @@ func main() {
 				}
 			}
 			stationAccuracyMap = make(map[string]map[int]*StationStats)
+			stationRecentDiffMap = make(map[string]map[int]*RecentPredictionDiff)
 			cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
 			statsMutex.Unlock()
 
@@ -711,6 +788,8 @@ func main() {
 				gradedCount := 0
 				correctCount := 0
 				incorrectCount := 0
+				middlePrediction, hasMiddlePrediction := selectMiddlePrediction(predictions, arrival.ArrivalTime)
+				middleDiffMinutes := 0.0
 
 				// Grade every prediction observed at least 5 minutes before actual arrival.
 				for i := range predictions {
@@ -750,8 +829,11 @@ func main() {
 					}
 				}
 
-				if gradedCount > 0 {
-					// Update statistics for this arrival with all eligible predictions.
+				if hasMiddlePrediction && middlePrediction.ArrivalTime != nil {
+					middleDiffMinutes = arrival.ArrivalTime.Sub(*middlePrediction.ArrivalTime).Minutes()
+				}
+
+				if gradedCount > 0 || hasMiddlePrediction {
 					statsMutex.Lock()
 					if stationAccuracyMap[arrival.StationPlaceID] == nil {
 						stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
@@ -759,24 +841,56 @@ func main() {
 					if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
 						stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
 					}
-					stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
-					stats.Total += gradedCount
-					stats.Correct += correctCount
-					stats.Incorrect += incorrectCount
+
+					if gradedCount > 0 {
+						// Update statistics for this arrival with all eligible predictions.
+						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+						stats.Total += gradedCount
+						stats.Correct += correctCount
+						stats.Incorrect += incorrectCount
+					}
+
+					if hasMiddlePrediction && middlePrediction.ArrivalTime != nil {
+						if stationRecentDiffMap[arrival.StationPlaceID] == nil {
+							stationRecentDiffMap[arrival.StationPlaceID] = make(map[int]*RecentPredictionDiff)
+						}
+						stationRecentDiffMap[arrival.StationPlaceID][arrival.Direction] = &RecentPredictionDiff{
+							DifferenceMinutes:         middleDiffMinutes,
+							ArrivalTime:               arrival.ArrivalTime,
+							PredictionObservationTime: middlePrediction.ObservationTime,
+							PredictionArrivalTime:     *middlePrediction.ArrivalTime,
+							TrainID:                   arrival.TrainID,
+						}
+					}
 
 					updateCachedAccuracy(arrival.StationPlaceID)
-					accuracy := float64(stats.Correct) / float64(stats.Total) * 100
-					directionName := "Outbound"
-					if arrival.Direction == 1 {
-						directionName = "Inbound"
+
+					if gradedCount > 0 {
+						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+						accuracy := 0.0
+						if stats.Total > 0 {
+							accuracy = float64(stats.Correct) / float64(stats.Total) * 100
+						}
+						directionName := "Outbound"
+						if arrival.Direction == 1 {
+							directionName = "Inbound"
+						}
+						debugf("\nSTATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
+						debugf("   Total Predictions: %d\n", stats.Total)
+						debugf("   Correct (<=3 min): %d\n", stats.Correct)
+						debugf("   Wrong (>3 min):   %d\n", stats.Incorrect)
+						debugf("   Accuracy Rate:    %.2f%%\n", accuracy)
 					}
-					debugf("\nSTATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
-					debugf("   Total Predictions: %d\n", stats.Total)
-					debugf("   Correct (<=3 min): %d\n", stats.Correct)
-					debugf("   Wrong (>3 min):   %d\n", stats.Incorrect)
-					debugf("   Accuracy Rate:    %.2f%%\n", accuracy)
+
+					if hasMiddlePrediction && middlePrediction.ArrivalTime != nil {
+						debugf("Most recent arrival diff saved [%s dir=%d]: %.2f min (middle snapshot at %s)\n",
+							arrival.StationPlaceID, arrival.Direction, middleDiffMinutes,
+							middlePrediction.ObservationTime.Format(time.RFC3339))
+					}
 					statsMutex.Unlock()
-				} else {
+				}
+
+				if gradedCount == 0 {
 					debugln("No predictions observed at least 5 minutes before arrival")
 				}
 				// Cleanup: Remove evaluated predictions to prevent memory leak
@@ -806,8 +920,10 @@ func main() {
 		defer ticker.Stop()
 		debugln("Started periodic prediction fetching (every 1 minutes)...")
 
-		// Map of platform stops to their parent stations
+		// Map of actively polled platform stops to their parent stations
 		// Format: platformID -> parentStationID
+		// Keep a single active ID set per physical platform to avoid duplicate
+		// prediction ingestion when MBTA serves both legacy and current stop IDs.
 		platformToParent := map[string]string{
 			"70106": "place-lake", "70107": "place-lake", // Boston College
 			"70110": "place-sougr", "70111": "place-sougr", // South Street
@@ -820,11 +936,9 @@ func main() {
 			"70128": "place-grigg", "70129": "place-grigg", // Griggs Street
 			"70130": "place-harvd", "70131": "place-harvd", // Harvard Avenue
 			"70134": "place-brico", "70135": "place-brico", // Packards Corner
-			// Canonicalize orphan-platform station keys so both directions aggregate to one station ID.
-			"70136": "70136", "70137": "70136", // Babcock Street (legacy/orphan IDs)
-			"170136": "70136", "170137": "70136", // Babcock Street current IDs
-			"70140": "70140", "70141": "70140", // Amory Street (legacy/orphan IDs)
-			"170140": "70140", "170141": "70140", // Amory Street current IDs (Saint Paul Street B)
+			// Babcock/Amory use current MBTA IDs only; canonical station keys stay 70136/70140.
+			"170136": "70136", "170137": "70136", // Babcock Street
+			"170140": "70140", "170141": "70140", // Amory Street
 			"70144": "place-bucen", "70145": "place-bucen", // Boston University Central
 			"70146": "place-buest", "70147": "place-buest", // Boston University East
 			"70148": "place-bland", "70149": "place-bland", // Blandford Street

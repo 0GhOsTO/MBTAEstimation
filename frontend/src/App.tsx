@@ -1,19 +1,7 @@
 import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import 'katex/dist/katex.min.css'
-import katex from 'katex'
 import './App.css'
-
-// LatexMath component for rendering LaTeX
-function LatexMath({ children, block = true }: { children: string; block?: boolean }) {
-  const html = katex.renderToString(children, {
-    throwOnError: false,
-    displayMode: block,
-  })
-  
-  return <div dangerouslySetInnerHTML={{ __html: html }} />
-}
 
 interface LogEntry {
   id: number;
@@ -28,6 +16,8 @@ interface StationStats {
   inbound_total: number;
   outbound_accuracy: number;
   outbound_total: number;
+  inbound_recent_diff_minutes?: number | null;
+  outbound_recent_diff_minutes?: number | null;
 }
 
 // Green Line stations with actual GPS coordinates
@@ -283,6 +273,31 @@ function App() {
     setOutboundAccuracy(Math.round(stats.outbound_accuracy))
   }
 
+  const formatRecentDiff = (diff?: number | null) => {
+    if (diff === null || diff === undefined || Number.isNaN(diff)) {
+      return 'Waiting...'
+    }
+    const absDiff = Math.abs(diff)
+    if (absDiff < 0.05) {
+      return 'Train arrived on time'
+    }
+    const roundedUp = Math.ceil(absDiff)
+    const unit = roundedUp === 1 ? 'minute' : 'minutes'
+    return diff > 0
+      ? `Train arrived ${roundedUp} ${unit} late`
+      : `Train arrived ${roundedUp} ${unit} fast`
+  }
+
+  const getRecentDiffClass = (diff?: number | null) => {
+    if (diff === null || diff === undefined || Number.isNaN(diff)) {
+      return 'no-data'
+    }
+    if (Math.abs(diff) < 0.05) {
+      return 'on-time'
+    }
+    return diff > 0 ? 'late' : 'early'
+  }
+
   const handleStationSelect = (station: string) => {
     setSelectedStation(station)
     
@@ -313,6 +328,8 @@ function App() {
   const selectedStats = selectedStationID ? stationData[selectedStationID] : undefined
   const inboundTotal = selectedStats ? selectedStats.inbound_total : 0
   const outboundTotal = selectedStats ? selectedStats.outbound_total : 0
+  const inboundRecentDiff = selectedStats?.inbound_recent_diff_minutes
+  const outboundRecentDiff = selectedStats?.outbound_recent_diff_minutes
 
   return (
     <div className="app-container">
@@ -325,26 +342,32 @@ function App() {
             onClick={() => setShowEquation(!showEquation)}
           >
             <span>{showEquation ? '▼' : '▶'}</span>
-            <span>How it's calculated</span>
+            <span>What does the % mean?</span>
           </button>
           {showEquation && (
             <div className="equation-box">
-              <div className="equation-line">
-                <LatexMath>
-                  {`\\text{Trustworthiness}(\\%) = \\frac{\\text{Correct Predictions}}{\\text{Total Predictions}} \\times 100`}
-                </LatexMath>
-              </div>
-              <div className="equation-line">
-                <LatexMath>
-                  {`\\text{Correct} = \\begin{cases} 1 & \\text{if } |\\text{Predicted} - \\text{Actual}| \\leq 3\\text{ min} \\\\ 0 & \\text{otherwise} \\end{cases}`}
-                </LatexMath>
+              <div className="reliability-explanation">
+                <div className="reliability-levels">
+                  <div className="reliability-level level-poor">
+                    <span className="level-range">~50%</span>
+                    <span className="level-label">Often delayed train</span>
+                  </div>
+                  <div className="reliability-level level-moderate">
+                    <span className="level-range">50-70%</span>
+                    <span className="level-label">Sometimes delayed train</span>
+                  </div>
+                  <div className="reliability-level level-good">
+                    <span className="level-range">70%+</span>
+                    <span className="level-label">Usually on-time train</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
           <div className="metrics-and-stations">
             <div className="accuracy-circles-container">
               <div className="accuracy-item">
-                <div className={`percentage-circle ${inboundTotal > 0 ? (inboundAccuracy >= 50 ? 'good' : 'poor') : 'no-data'}`}>
+                <div className={`percentage-circle ${inboundTotal > 0 ? (inboundAccuracy >= 70 ? 'good' : inboundAccuracy >= 50 ? 'moderate' : 'poor') : 'no-data'}`}>
                   <span className="percentage-number">
                     {inboundTotal > 0 ? `${inboundAccuracy}%` : 'N/A'}
                   </span>
@@ -354,7 +377,7 @@ function App() {
                 {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
               </div>
               <div className="accuracy-item">
-                <div className={`percentage-circle ${outboundTotal > 0 ? (outboundAccuracy >= 50 ? 'good' : 'poor') : 'no-data'}`}>
+                <div className={`percentage-circle ${outboundTotal > 0 ? (outboundAccuracy >= 70 ? 'good' : outboundAccuracy >= 50 ? 'moderate' : 'poor') : 'no-data'}`}>
                   <span className="percentage-number">
                     {outboundTotal > 0 ? `${outboundAccuracy}%` : 'N/A'}
                   </span>
@@ -362,6 +385,19 @@ function App() {
                 <p className="accuracy-label">Outbound</p>
                 <p className="direction-label">to Boston College</p>
                 {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
+              </div>
+            </div>
+          </div>
+          <div className="recent-diff-section">
+            <h3>Most Recent Arrival</h3>
+            <div className="recent-diff-grid">
+              <div className={`recent-diff-card ${getRecentDiffClass(inboundRecentDiff)}`}>
+                <p className="recent-diff-direction">Inbound</p>
+                <p className="recent-diff-value">{formatRecentDiff(inboundRecentDiff)}</p>
+              </div>
+              <div className={`recent-diff-card ${getRecentDiffClass(outboundRecentDiff)}`}>
+                <p className="recent-diff-direction">Outbound</p>
+                <p className="recent-diff-value">{formatRecentDiff(outboundRecentDiff)}</p>
               </div>
             </div>
           </div>
