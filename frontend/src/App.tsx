@@ -350,15 +350,15 @@ function App() {
                 <div className="reliability-levels">
                   <div className="reliability-level level-poor">
                     <span className="level-range">~50%</span>
-                    <span className="level-label">Often delayed train</span>
+                    <span className="level-label">Train often delayed</span>
                   </div>
                   <div className="reliability-level level-moderate">
                     <span className="level-range">50-70%</span>
-                    <span className="level-label">Sometimes delayed train</span>
+                    <span className="level-label">Train sometimes delayed</span>
                   </div>
                   <div className="reliability-level level-good">
                     <span className="level-range">70%+</span>
-                    <span className="level-label">Usually on-time train</span>
+                    <span className="level-label">Train usually on time</span>
                   </div>
                 </div>
               </div>
