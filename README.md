@@ -84,6 +84,10 @@ $$
 - **Frontend endpoint path:** frontend now defaults to `/api/v1/statistics` (configurable via `VITE_STATS_PATH`).
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+=======
+- **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
+>>>>>>> theirs
 =======
 - **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
 >>>>>>> theirs

@@ -5,7 +5,10 @@ import './App.css'
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 function LatexMath({ children, block = true }: { children: string; block?: boolean }) {
@@ -77,9 +80,12 @@ const stationNameToID: { [key: string]: string } = {
   "Packards Corner": "place-brico",
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
   "Babcock Street": "70136",  // Orphan platform
   "Amory Street": "70140",  // Orphan platform
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
   "Babcock Street": "70136",
@@ -87,6 +93,9 @@ const stationNameToID: { [key: string]: string } = {
   "Saint Paul Street": "70140",
   "BU West": "70142",
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -268,6 +277,7 @@ function App() {
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
   const addLog = (message: string) => {
     const newLog: LogEntry = {
       id: Date.now(),
@@ -313,6 +323,8 @@ function App() {
     return diff > 0 ? 'late' : 'early'
   }
 
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 =======
