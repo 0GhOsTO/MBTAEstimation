@@ -82,6 +82,14 @@ $$
 - **TimescaleDB:** backend automatically tries `CREATE EXTENSION timescaledb` and hypertable creation. If extension is unavailable it gracefully continues on standard PostgreSQL.
 - **Reduced MBTA API usage:** prediction polling is now batched by direction (`2 calls/minute`) instead of one call per platform+direction.
 - **Frontend endpoint path:** frontend now defaults to `/api/v1/statistics` (configurable via `VITE_STATS_PATH`).
+<<<<<<< ours
+<<<<<<< ours
+=======
+- **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
+>>>>>>> theirs
+=======
+- **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
+>>>>>>> theirs
 - **Frontend container:** `frontend/Dockerfile` builds static assets and serves with NGINX for production-ready hosting behind ALB/CloudFront.
 
 ## Screenshots

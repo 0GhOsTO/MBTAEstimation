@@ -1,8 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 
+<<<<<<< ours
+<<<<<<< ours
+=======
+=======
+>>>>>>> theirs
+function LatexMath({ children, block = true }: { children: string; block?: boolean }) {
+  const html = katex.renderToString(children, {
+    throwOnError: false,
+    displayMode: block,
+  })
+
+  return <div dangerouslySetInnerHTML={{ __html: html }} />
+}
+
+>>>>>>> theirs
 interface LogEntry {
   id: number;
   timestamp: string;
@@ -20,7 +35,6 @@ interface StationStats {
   outbound_recent_diff_minutes?: number | null;
 }
 
-// Green Line stations with actual GPS coordinates
 const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: number }> } = {
   'Green-B': [
     { name: "Boston College", lat: 42.3396, lng: -71.1686 },
@@ -47,68 +61,8 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
     { name: "Government Center", lat: 42.3597, lng: -71.0592 },
   ],
-  'Green-C': [
-    { name: "Cleveland Circle", lat: 42.3362, lng: -71.1495 },
-    { name: "Englewood Ave", lat: 42.3375, lng: -71.1463 },
-    { name: "Dean Road", lat: 42.3380, lng: -71.1417 },
-    { name: "Tappan Street", lat: 42.3383, lng: -71.1387 },
-    { name: "Washington Square", lat: 42.3433, lng: -71.1353 },
-    { name: "Fairbanks Street", lat: 42.3476, lng: -71.1314 },
-    { name: "Brandon Hall", lat: 42.3490, lng: -71.1291 },
-    { name: "Summit Avenue", lat: 42.3502, lng: -71.1251 },
-    { name: "Coolidge Corner", lat: 42.3420, lng: -71.1211 },
-    { name: "Saint Paul Street", lat: 42.3511, lng: -71.1157 },
-    { name: "Kenmore", lat: 42.3488, lng: -71.0952 },
-    { name: "Hynes Convention Center", lat: 42.3472, lng: -71.0876 },
-    { name: "Copley", lat: 42.3499, lng: -71.0778 },
-    { name: "Arlington", lat: 42.3524, lng: -71.0704 },
-    { name: "Boylston", lat: 42.3530, lng: -71.0646 },
-    { name: "Park Street", lat: 42.3563, lng: -71.0622 },
-    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
-  ],
-  'Green-D': [
-    { name: "Riverside", lat: 42.3367, lng: -71.2514 },
-    { name: "Woodland", lat: 42.3332, lng: -71.2443 },
-    { name: "Waban", lat: 42.3258, lng: -71.2308 },
-    { name: "Eliot", lat: 42.3196, lng: -71.2164 },
-    { name: "Newton Highlands", lat: 42.3217, lng: -71.2061 },
-    { name: "Newton Centre", lat: 42.3290, lng: -71.1925 },
-    { name: "Chestnut Hill", lat: 42.3266, lng: -71.1652 },
-    { name: "Reservoir", lat: 42.3352, lng: -71.1496 },
-    { name: "Beaconsfield", lat: 42.3358, lng: -71.1403 },
-    { name: "Brookline Hills", lat: 42.3313, lng: -71.1267 },
-    { name: "Brookline Village", lat: 42.3328, lng: -71.1163 },
-    { name: "Longwood", lat: 42.3417, lng: -71.1099 },
-    { name: "Fenway", lat: 42.3451, lng: -71.1041 },
-    { name: "Kenmore", lat: 42.3488, lng: -71.0952 },
-    { name: "Hynes Convention Center", lat: 42.3472, lng: -71.0876 },
-    { name: "Copley", lat: 42.3499, lng: -71.0778 },
-    { name: "Arlington", lat: 42.3524, lng: -71.0704 },
-    { name: "Boylston", lat: 42.3530, lng: -71.0646 },
-    { name: "Park Street", lat: 42.3563, lng: -71.0622 },
-    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
-  ],
-  'Green-E': [
-    { name: "Heath Street", lat: 42.3282, lng: -71.1101 },
-    { name: "Back of the Hill", lat: 42.3301, lng: -71.1104 },
-    { name: "Riverway", lat: 42.3316, lng: -71.1107 },
-    { name: "Mission Park", lat: 42.3338, lng: -71.1098 },
-    { name: "Fenwood Road", lat: 42.3333, lng: -71.1056 },
-    { name: "Brigham Circle", lat: 42.3342, lng: -71.1047 },
-    { name: "Longwood Medical Area", lat: 42.3359, lng: -71.1005 },
-    { name: "Museum of Fine Arts", lat: 42.3381, lng: -71.0948 },
-    { name: "Northeastern University", lat: 42.3403, lng: -71.0889 },
-    { name: "Symphony", lat: 42.3429, lng: -71.0853 },
-    { name: "Prudential", lat: 42.3457, lng: -71.0816 },
-    { name: "Copley", lat: 42.3499, lng: -71.0778 },
-    { name: "Arlington", lat: 42.3524, lng: -71.0704 },
-    { name: "Boylston", lat: 42.3530, lng: -71.0646 },
-    { name: "Park Street", lat: 42.3563, lng: -71.0622 },
-    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
-  ],
-};
+}
 
-// Map station names to backend station IDs (must match backend exactly)
 const stationNameToID: { [key: string]: string } = {
   "Boston College": "place-lake",
   "South Street": "place-sougr",
@@ -121,8 +75,21 @@ const stationNameToID: { [key: string]: string } = {
   "Griggs Street": "place-grigg",
   "Harvard Avenue": "place-harvd",
   "Packards Corner": "place-brico",
+<<<<<<< ours
+<<<<<<< ours
   "Babcock Street": "70136",  // Orphan platform
   "Amory Street": "70140",  // Orphan platform
+=======
+=======
+>>>>>>> theirs
+  "Babcock Street": "70136",
+  "Pleasant Street": "70138",
+  "Saint Paul Street": "70140",
+  "BU West": "70142",
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
   "BU Central": "place-bucen",
   "BU East": "place-buest",
   "Blandford Street": "place-bland",
@@ -133,7 +100,7 @@ const stationNameToID: { [key: string]: string } = {
   "Boylston": "place-boyls",
   "Park Street": "place-pktrm",
   "Government Center": "place-gover",
-};
+}
 
 const supportedLines = ['Green-B'] as const
 const STORAGE_KEY = 'mbta-reliability-ui-state'
@@ -141,6 +108,23 @@ const STORAGE_KEY = 'mbta-reliability-ui-state'
 interface PersistedUIState {
   selectedLine: string
   selectedStation: string
+}
+
+const getApiBaseUrl = (): string => {
+  const configured = import.meta.env.VITE_API_URL
+  if (configured && configured.trim()) {
+    return configured.trim().replace(/\/$/, '')
+  }
+
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8080'
+  }
+
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+
+  return ''
 }
 
 const getInitialUIState = (): PersistedUIState => {
@@ -199,46 +183,75 @@ function App() {
       message: "Application initialized",
     }
   ])
+  const lastFetchMessageRef = useRef('')
 
-  // Fetch statistics from backend
+  const API_URL = useMemo(() => getApiBaseUrl(), [])
+  const STATS_PATH = useMemo(() => (import.meta.env.VITE_STATS_PATH || '/api/v1/statistics').trim(), [])
+  const POLL_MS = Number(import.meta.env.VITE_STATS_POLL_MS || 10000)
+  const REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_STATS_TIMEOUT_MS || 8000)
+
+  const addLog = (message: string) => {
+    const newLog: LogEntry = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString(),
+      message,
+    }
+    setLogs(prev => [newLog, ...prev].slice(0, 50))
+  }
+
+  const updateAccuracyForStation = (stats?: StationStats) => {
+    if (!stats) {
+      setInboundAccuracy(0)
+      setOutboundAccuracy(0)
+      return
+    }
+
+    setInboundAccuracy(Math.round(stats.inbound_accuracy))
+    setOutboundAccuracy(Math.round(stats.outbound_accuracy))
+  }
+
   useEffect(() => {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
-    
     const fetchStatistics = async () => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
       try {
-        const response = await fetch(`${API_URL}/api/statistics`)
-        const data: StationStats[] = await response.json()
-        
-        // Convert array to map for easy lookup
-        const dataMap: { [key: string]: StationStats } = {}
-        data.forEach(stat => {
-          dataMap[stat.station_id] = stat
-        })
-        setStationData(dataMap)
-        
-        // Update current station if it has data
-        const stationID = stationNameToID[selectedStation]
-        if (stationID && dataMap[stationID]) {
-          updateAccuracyForStation(dataMap[stationID])
-        } else {
-          updateAccuracyForStation(undefined)
+        const response = await fetch(`${API_URL}${STATS_PATH}`, { signal: controller.signal })
+        if (!response.ok) {
+          throw new Error(`statistics request failed: ${response.status}`)
         }
-        
-        addLog(`Fetched statistics for ${data.length} stations`)
+
+        const payload = await response.json()
+        if (!Array.isArray(payload)) {
+          throw new Error('statistics response format is invalid')
+        }
+
+        const dataMap: { [key: string]: StationStats } = {}
+        for (const stat of payload as StationStats[]) {
+          dataMap[stat.station_id] = stat
+        }
+        setStationData(dataMap)
+
+        const stationID = stationNameToID[selectedStation]
+        updateAccuracyForStation(stationID ? dataMap[stationID] : undefined)
+
+        const nextMessage = `Fetched statistics for ${payload.length} stations`
+        if (lastFetchMessageRef.current !== nextMessage) {
+          addLog(nextMessage)
+          lastFetchMessageRef.current = nextMessage
+        }
       } catch (error) {
         console.error('Error fetching statistics:', error)
-        addLog('Error: Could not connect to backend')
+        addLog('Error: Could not connect to backend statistics endpoint')
+      } finally {
+        clearTimeout(timeout)
       }
     }
 
-    // Fetch immediately
     fetchStatistics()
-
-    // Fetch every 10 seconds
-    const interval = setInterval(fetchStatistics, 10000)
-
+    const interval = setInterval(fetchStatistics, Math.max(5000, POLL_MS))
     return () => clearInterval(interval)
-  }, [selectedStation])
+  }, [API_URL, STATS_PATH, POLL_MS, REQUEST_TIMEOUT_MS, selectedStation])
 
   const currentStations = stationsByLine[selectedLine]
 
@@ -249,10 +262,12 @@ function App() {
         JSON.stringify({ selectedLine, selectedStation }),
       )
     } catch {
-      // Ignore storage write errors (private browsing, quota, etc).
+      // Ignore storage write errors.
     }
   }, [selectedLine, selectedStation])
 
+<<<<<<< ours
+<<<<<<< ours
   const addLog = (message: string) => {
     const newLog: LogEntry = {
       id: Date.now(),
@@ -298,18 +313,20 @@ function App() {
     return diff > 0 ? 'late' : 'early'
   }
 
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
   const handleStationSelect = (station: string) => {
     setSelectedStation(station)
-    
-    // Get station ID from name
+
     const stationID = stationNameToID[station]
-    
+
     if (stationID && stationData[stationID]) {
       const stats = stationData[stationID]
       updateAccuracyForStation(stats)
       addLog(`Station: ${station} | Inbound: ${stats.inbound_total} predictions | Outbound: ${stats.outbound_total} predictions`)
     } else {
-      // No data yet
       updateAccuracyForStation(undefined)
       addLog(`${station} - No data available yet`)
     }
@@ -337,7 +354,7 @@ function App() {
         <div className="trustworthiness-display">
           <h1 className="project-title">MBTA Reliability</h1>
           <h2 className="station-name">{selectedStation}</h2>
-          <button 
+          <button
             className="equation-toggle-btn"
             onClick={() => setShowEquation(!showEquation)}
           >
@@ -402,9 +419,9 @@ function App() {
             </div>
           </div>
           <div className="station-selector-container">
-            <select 
-              className="station-selector" 
-              value={selectedStation} 
+            <select
+              className="station-selector"
+              value={selectedStation}
               onChange={(e) => handleStationSelect(e.target.value)}
             >
               {currentStations.map((station) => (
@@ -416,14 +433,14 @@ function App() {
           </div>
         </div>
       </div>
-      
+
       <div className="right-panel">
         <div className="map-container">
           <div className="map-header">
             <h2>Green Line</h2>
-            <select 
-              className="line-selector" 
-              value={selectedLine} 
+            <select
+              className="line-selector"
+              value={selectedLine}
               onChange={(e) => handleLineChange(e.target.value)}
             >
               {supportedLines.map((line) => (
@@ -452,7 +469,7 @@ function App() {
                   fillOpacity={1}
                   eventHandlers={{
                     click: () => {
-                      handleStationSelect(station.name);
+                      handleStationSelect(station.name)
                     },
                   }}
                 >
@@ -464,7 +481,7 @@ function App() {
             </MapContainer>
           </div>
         </div>
-        
+
         <div className="log-container">
           <h3>Activity Log</h3>
           <div className="log-content">
