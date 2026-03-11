@@ -1,19 +1,7 @@
 import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import 'katex/dist/katex.min.css'
-import katex from 'katex'
 import './App.css'
-
-// LatexMath component for rendering LaTeX
-function LatexMath({ children, block = true }: { children: string; block?: boolean }) {
-  const html = katex.renderToString(children, {
-    throwOnError: false,
-    displayMode: block,
-  })
-  
-  return <div dangerouslySetInnerHTML={{ __html: html }} />
-}
 
 interface LogEntry {
   id: number;
@@ -28,6 +16,8 @@ interface StationStats {
   inbound_total: number;
   outbound_accuracy: number;
   outbound_total: number;
+  inbound_recent_diff_minutes?: number | null;
+  outbound_recent_diff_minutes?: number | null;
 }
 
 // Green Line stations with actual GPS coordinates
@@ -45,9 +35,7 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Harvard Avenue", lat: 42.3502, lng: -71.1312 },
     { name: "Packards Corner", lat: 42.3519, lng: -71.1251 },
     { name: "Babcock Street", lat: 42.3513, lng: -71.1218 },
-    { name: "Pleasant Street", lat: 42.3513, lng: -71.1187 },
-    { name: "Saint Paul Street", lat: 42.3511, lng: -71.1157 },
-    { name: "BU West", lat: 42.3499, lng: -71.1138 },
+    { name: "Amory Street", lat: 42.3511, lng: -71.1157 },
     { name: "BU Central", lat: 42.3497, lng: -71.1070 },
     { name: "BU East", lat: 42.3496, lng: -71.1040 },
     { name: "Blandford Street", lat: 42.3493, lng: -71.1002 },
@@ -134,9 +122,7 @@ const stationNameToID: { [key: string]: string } = {
   "Harvard Avenue": "place-harvd",
   "Packards Corner": "place-brico",
   "Babcock Street": "70136",  // Orphan platform
-  "Pleasant Street": "70138",  // Orphan platform
-  "Saint Paul Street": "70140",  // Orphan platform
-  "BU West": "70142",  // Orphan platform
+  "Amory Street": "70140",  // Orphan platform
   "BU Central": "place-bucen",
   "BU East": "place-buest",
   "Blandford Street": "place-bland",
@@ -217,14 +203,10 @@ function App() {
   // Fetch statistics from backend
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
-    const STATS_PATH = import.meta.env.VITE_STATS_PATH || '/api/v1/statistics'
     
     const fetchStatistics = async () => {
       try {
-        const response = await fetch(`${API_URL}${STATS_PATH}`)
-        if (!response.ok) {
-          throw new Error(`statistics request failed: ${response.status}`)
-        }
+        const response = await fetch(`${API_URL}/api/statistics`)
         const data: StationStats[] = await response.json()
         
         // Convert array to map for easy lookup
@@ -291,6 +273,31 @@ function App() {
     setOutboundAccuracy(Math.round(stats.outbound_accuracy))
   }
 
+  const formatRecentDiff = (diff?: number | null) => {
+    if (diff === null || diff === undefined || Number.isNaN(diff)) {
+      return 'Waiting...'
+    }
+    const absDiff = Math.abs(diff)
+    if (absDiff < 0.05) {
+      return 'Train arrived on time'
+    }
+    const roundedUp = Math.ceil(absDiff)
+    const unit = roundedUp === 1 ? 'minute' : 'minutes'
+    return diff > 0
+      ? `Train arrived ${roundedUp} ${unit} late`
+      : `Train arrived ${roundedUp} ${unit} fast`
+  }
+
+  const getRecentDiffClass = (diff?: number | null) => {
+    if (diff === null || diff === undefined || Number.isNaN(diff)) {
+      return 'no-data'
+    }
+    if (Math.abs(diff) < 0.05) {
+      return 'on-time'
+    }
+    return diff > 0 ? 'late' : 'early'
+  }
+
   const handleStationSelect = (station: string) => {
     setSelectedStation(station)
     
@@ -321,6 +328,8 @@ function App() {
   const selectedStats = selectedStationID ? stationData[selectedStationID] : undefined
   const inboundTotal = selectedStats ? selectedStats.inbound_total : 0
   const outboundTotal = selectedStats ? selectedStats.outbound_total : 0
+  const inboundRecentDiff = selectedStats?.inbound_recent_diff_minutes
+  const outboundRecentDiff = selectedStats?.outbound_recent_diff_minutes
 
   return (
     <div className="app-container">
@@ -333,26 +342,32 @@ function App() {
             onClick={() => setShowEquation(!showEquation)}
           >
             <span>{showEquation ? '▼' : '▶'}</span>
-            <span>How it's calculated</span>
+            <span>What does the % mean?</span>
           </button>
           {showEquation && (
             <div className="equation-box">
-              <div className="equation-line">
-                <LatexMath>
-                  {`\\text{Trustworthiness}(\\%) = \\frac{\\text{Correct Predictions}}{\\text{Total Predictions}} \\times 100`}
-                </LatexMath>
-              </div>
-              <div className="equation-line">
-                <LatexMath>
-                  {`\\text{Correct} = \\begin{cases} 1 & \\text{if } |\\text{Predicted} - \\text{Actual}| \\leq 3\\text{ min} \\\\ 0 & \\text{otherwise} \\end{cases}`}
-                </LatexMath>
+              <div className="reliability-explanation">
+                <div className="reliability-levels">
+                  <div className="reliability-level level-poor">
+                    <span className="level-range">~50%</span>
+                    <span className="level-label">Train often delayed</span>
+                  </div>
+                  <div className="reliability-level level-moderate">
+                    <span className="level-range">50-70%</span>
+                    <span className="level-label">Train sometimes delayed</span>
+                  </div>
+                  <div className="reliability-level level-good">
+                    <span className="level-range">70%+</span>
+                    <span className="level-label">Train usually on time</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
           <div className="metrics-and-stations">
             <div className="accuracy-circles-container">
               <div className="accuracy-item">
-                <div className={`percentage-circle ${inboundTotal > 0 ? (inboundAccuracy >= 50 ? 'good' : 'poor') : 'no-data'}`}>
+                <div className={`percentage-circle ${inboundTotal > 0 ? (inboundAccuracy >= 70 ? 'good' : inboundAccuracy >= 50 ? 'moderate' : 'poor') : 'no-data'}`}>
                   <span className="percentage-number">
                     {inboundTotal > 0 ? `${inboundAccuracy}%` : 'N/A'}
                   </span>
@@ -362,7 +377,7 @@ function App() {
                 {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
               </div>
               <div className="accuracy-item">
-                <div className={`percentage-circle ${outboundTotal > 0 ? (outboundAccuracy >= 50 ? 'good' : 'poor') : 'no-data'}`}>
+                <div className={`percentage-circle ${outboundTotal > 0 ? (outboundAccuracy >= 70 ? 'good' : outboundAccuracy >= 50 ? 'moderate' : 'poor') : 'no-data'}`}>
                   <span className="percentage-number">
                     {outboundTotal > 0 ? `${outboundAccuracy}%` : 'N/A'}
                   </span>
@@ -370,6 +385,19 @@ function App() {
                 <p className="accuracy-label">Outbound</p>
                 <p className="direction-label">to Boston College</p>
                 {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
+              </div>
+            </div>
+          </div>
+          <div className="recent-diff-section">
+            <h3>Most Recent Arrival</h3>
+            <div className="recent-diff-grid">
+              <div className={`recent-diff-card ${getRecentDiffClass(inboundRecentDiff)}`}>
+                <p className="recent-diff-direction">Inbound</p>
+                <p className="recent-diff-value">{formatRecentDiff(inboundRecentDiff)}</p>
+              </div>
+              <div className={`recent-diff-card ${getRecentDiffClass(outboundRecentDiff)}`}>
+                <p className="recent-diff-direction">Outbound</p>
+                <p className="recent-diff-value">{formatRecentDiff(outboundRecentDiff)}</p>
               </div>
             </div>
           </div>
