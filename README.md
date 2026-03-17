@@ -1,6 +1,6 @@
 # [MBTA Estimation](https://mbta-estimation.vercel.app/)
 
-A real-time MBTA Green Line prediction accuracy tracker with an interactive web interface.
+A real-time MBTA Green Line prediction accuracy tracker with an interactive web interface. A SQL database version using AWS.
 
 ## Project Overview
 
@@ -32,6 +32,8 @@ $$
 0 & \text{otherwise}
 \end{cases}
 $$
+
+Only the predictions from the last two hours are stored and aggregated to calculated our score.
 
 ## Current Progress
 ### [Google Document of Progress](https://docs.google.com/document/d/1L1Hdq-_mwZ33vqSe75HmYA38mVIf2xTeh4whlfj5yr4/edit?usp=sharing)
@@ -74,28 +76,6 @@ $$
 - [ ] Expand to other green line branches
 - [ ] Provide score interpretations on the front end
 
-
-## AWS/Cloud Deployment Notes
-
-- **Backend (ECS/Fargate or App Runner):** uses `DATABASE_URL` (recommended for RDS/Timescale) or `DB_*` variables, and stores prediction snapshots directly in PostgreSQL instead of in-memory maps.
-- **Security defaults:** DB connections default to `DB_SSLMODE=require`; API CORS is restricted by `ALLOWED_ORIGINS` (comma-separated), defaulting to `http://localhost:5173` in local dev.
-- **TimescaleDB:** backend automatically tries `CREATE EXTENSION timescaledb` and hypertable creation. If extension is unavailable it gracefully continues on standard PostgreSQL.
-- **Reduced MBTA API usage:** prediction polling is now batched by direction (`2 calls/minute`) instead of one call per platform+direction.
-- **Frontend endpoint path:** frontend now defaults to `/api/v1/statistics` (configurable via `VITE_STATS_PATH`).
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-=======
-- **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
->>>>>>> theirs
-=======
-- **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
->>>>>>> theirs
-=======
-- **Frontend runtime config:** set `VITE_API_URL` to your backend URL (for AWS domain/ALB) and optionally tune `VITE_STATS_PATH`, `VITE_STATS_POLL_MS`, and `VITE_STATS_TIMEOUT_MS`.
->>>>>>> theirs
-- **Frontend container:** `frontend/Dockerfile` builds static assets and serves with NGINX for production-ready hosting behind ALB/CloudFront.
-
 ## Screenshots
 
 <img src="https://github.com/0GhOsTO/MBTAEstimation/blob/main/MBTAweb.png">
@@ -123,6 +103,14 @@ The grading uses the prediction observed closest to **5 minutes before** the act
 - MBTA V3 API
 - godotenv (Environment variables)
 
+**AWS Tools Used**
+- EC2: For deploying the frontend and backend
+- RDS: Cloud database used
+- Route 53: For domain setup
+
+**Cloud Migration Strategies Applied**
+- Refactor: Changed from using hash maps to store prediction data to SQL database
+- Replatform: The hash maps were originally in-memory data structures. The new prediction data is now stored on a cloud database (AWS RDS).
 ## Setup
 
 ### Frontend
