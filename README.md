@@ -35,6 +35,8 @@ $$
 \end{cases}
 $$
 
+Only the predictions from the last two hours are stored and aggregated to calculated our score.
+
 ## Current Progress
 ### [Google Document of Progress](https://docs.google.com/document/d/1L1Hdq-_mwZ33vqSe75HmYA38mVIf2xTeh4whlfj5yr4/edit?usp=sharing)
 ### Frontend ✅
