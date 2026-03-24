@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 
@@ -23,48 +23,51 @@ interface StationStats {
 // Green Line stations with actual GPS coordinates
 const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: number }> } = {
   'Green-B': [
-    { name: "Boston College", lat: 42.3396, lng: -71.1686 },
-    { name: "South Street", lat: 42.3399, lng: -71.1571 },
-    { name: "Chestnut Hill Ave", lat: 42.3387, lng: -71.1527 },
-    { name: "Chiswick Road", lat: 42.3406, lng: -71.1504 },
-    { name: "Sutherland Road", lat: 42.3410, lng: -71.1464 },
-    { name: "Washington Street", lat: 42.3431, lng: -71.1420 },
-    { name: "Warren Street", lat: 42.3485, lng: -71.1401 },
-    { name: "Allston Street", lat: 42.3484, lng: -71.1373 },
-    { name: "Griggs Street", lat: 42.3481, lng: -71.1345 },
-    { name: "Harvard Avenue", lat: 42.3502, lng: -71.1312 },
-    { name: "Packards Corner", lat: 42.3519, lng: -71.1251 },
-    { name: "Babcock Street", lat: 42.3513, lng: -71.1218 },
-    { name: "Amory Street", lat: 42.3511, lng: -71.1157 },
-    { name: "BU Central", lat: 42.3497, lng: -71.1070 },
-    { name: "BU East", lat: 42.3496, lng: -71.1040 },
-    { name: "Blandford Street", lat: 42.3493, lng: -71.1002 },
-    { name: "Kenmore", lat: 42.3488, lng: -71.0952 },
-    { name: "Hynes Convention Center", lat: 42.3472, lng: -71.0876 },
-    { name: "Copley", lat: 42.3499, lng: -71.0778 },
-    { name: "Arlington", lat: 42.3524, lng: -71.0704 },
-    { name: "Boylston", lat: 42.3530, lng: -71.0646 },
-    { name: "Park Street", lat: 42.3563, lng: -71.0622 },
-    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
+    { name: "Boston College", lat: 42.340081, lng: -71.166769 },
+    { name: "South Street", lat: 42.339600, lng: -71.157661 },
+    { name: "Chestnut Hill Ave", lat: 42.338169, lng: -71.153160 },
+    { name: "Chiswick Road", lat: 42.340805, lng: -71.150711 },
+    { name: "Sutherland Road", lat: 42.341614, lng: -71.146202 },
+    { name: "Washington Street", lat: 42.343864, lng: -71.142853 },
+    { name: "Warren Street", lat: 42.348343, lng: -71.140457 },
+    { name: "Allston Street", lat: 42.348701, lng: -71.137955 },
+    { name: "Griggs Street", lat: 42.348545, lng: -71.134949 },
+    { name: "Harvard Avenue", lat: 42.350243, lng: -71.131355 },
+    { name: "Packards Corner", lat: 42.351967, lng: -71.125031 },
+    { name: "Babcock Street", lat: 42.351538, lng: -71.119553 },
+    { name: "Amory Street", lat: 42.350901, lng: -71.114318 },
+    { name: "BU Central", lat: 42.350082, lng: -71.106865 },
+    { name: "BU East", lat: 42.349735, lng: -71.103889 },
+    { name: "Blandford Street", lat: 42.349293, lng: -71.100258 },
+    { name: "Kenmore", lat: 42.348949, lng: -71.095169 },
+    { name: "Hynes Convention Center", lat: 42.347888, lng: -71.087903 },
+    { name: "Copley", lat: 42.349974, lng: -71.077447 },
+    { name: "Arlington", lat: 42.351902, lng: -71.070893 },
+    { name: "Boylston", lat: 42.353020, lng: -71.064590 },
+    { name: "Park Street", lat: 42.356395, lng: -71.062424 },
+    { name: "Government Center", lat: 42.359705, lng: -71.059215 },
   ],
   'Green-C': [
-    { name: "Cleveland Circle", lat: 42.3362, lng: -71.1495 },
-    { name: "Englewood Ave", lat: 42.3375, lng: -71.1463 },
-    { name: "Dean Road", lat: 42.3380, lng: -71.1417 },
-    { name: "Tappan Street", lat: 42.3383, lng: -71.1387 },
-    { name: "Washington Square", lat: 42.3433, lng: -71.1353 },
-    { name: "Fairbanks Street", lat: 42.3476, lng: -71.1314 },
-    { name: "Brandon Hall", lat: 42.3490, lng: -71.1291 },
-    { name: "Summit Avenue", lat: 42.3502, lng: -71.1251 },
-    { name: "Coolidge Corner", lat: 42.3420, lng: -71.1211 },
-    { name: "Saint Paul Street", lat: 42.3511, lng: -71.1157 },
-    { name: "Kenmore", lat: 42.3488, lng: -71.0952 },
-    { name: "Hynes Convention Center", lat: 42.3472, lng: -71.0876 },
-    { name: "Copley", lat: 42.3499, lng: -71.0778 },
-    { name: "Arlington", lat: 42.3524, lng: -71.0704 },
-    { name: "Boylston", lat: 42.3530, lng: -71.0646 },
-    { name: "Park Street", lat: 42.3563, lng: -71.0622 },
-    { name: "Government Center", lat: 42.3597, lng: -71.0592 },
+    { name: "Cleveland Circle", lat: 42.336142, lng: -71.149326 },
+    { name: "Englewood Ave", lat: 42.336971, lng: -71.145660 },
+    { name: "Dean Road", lat: 42.337807, lng: -71.141853 },
+    { name: "Tappan Street", lat: 42.338459, lng: -71.138702 },
+    { name: "Washington Square", lat: 42.339394, lng: -71.135330 },
+    { name: "Fairbanks Street", lat: 42.339725, lng: -71.131073 },
+    { name: "Brandon Hall", lat: 42.340023, lng: -71.129082 },
+    { name: "Summit Avenue", lat: 42.341110, lng: -71.125610 },
+    { name: "Coolidge Corner", lat: 42.342116, lng: -71.121263 },
+    { name: "Kent Street", lat: 42.344074, lng: -71.114197 },
+    { name: "Hawes Street", lat: 42.344906, lng: -71.111145 },
+    { name: "Saint Mary's Street", lat: 42.345974, lng: -71.107353 },
+    { name: "Saint Paul Street", lat: 42.343327, lng: -71.116997 },
+    { name: "Kenmore", lat: 42.348949, lng: -71.095169 },
+    { name: "Hynes Convention Center", lat: 42.347888, lng: -71.087903 },
+    { name: "Copley", lat: 42.349974, lng: -71.077447 },
+    { name: "Arlington", lat: 42.351902, lng: -71.070893 },
+    { name: "Boylston", lat: 42.353020, lng: -71.064590 },
+    { name: "Park Street", lat: 42.356395, lng: -71.062424 },
+    { name: "Government Center", lat: 42.359705, lng: -71.059215 },
   ],
   'Green-D': [
     { name: "Riverside", lat: 42.3367, lng: -71.2514 },
@@ -87,6 +90,11 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Boylston", lat: 42.3530, lng: -71.0646 },
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
     { name: "Government Center", lat: 42.3597, lng: -71.0592 },
+    { name: "Haymarket", lat: 42.363021, lng: -71.058290 },
+    { name: "North Station", lat: 42.365577, lng: -71.061290 },
+    { name: "Science Park/West End", lat: 42.366664, lng: -71.067666 },
+    { name: "Lechmere", lat: 42.371572, lng: -71.076584 },
+    { name: "Union Square", lat: 42.377359, lng: -71.094761 },
   ],
   'Green-E': [
     { name: "Heath Street", lat: 42.3282, lng: -71.1101 },
@@ -105,8 +113,24 @@ const stationsByLine: { [key: string]: Array<{ name: string; lat: number; lng: n
     { name: "Boylston", lat: 42.3530, lng: -71.0646 },
     { name: "Park Street", lat: 42.3563, lng: -71.0622 },
     { name: "Government Center", lat: 42.3597, lng: -71.0592 },
+    { name: "Haymarket", lat: 42.363021, lng: -71.058290 },
+    { name: "North Station", lat: 42.365577, lng: -71.061290 },
+    { name: "Science Park/West End", lat: 42.366664, lng: -71.067666 },
+    { name: "Lechmere", lat: 42.371572, lng: -71.076584 },
+    { name: "East Somerville", lat: 42.379467, lng: -71.086625 },
+    { name: "Gilman Square", lat: 42.387928, lng: -71.096766 },
+    { name: "Magoun Square", lat: 42.393682, lng: -71.106388 },
+    { name: "Ball Square", lat: 42.399889, lng: -71.111003 },
+    { name: "Medford/Tufts", lat: 42.407975, lng: -71.117044 },
   ],
 };
+
+const lineDirectionLabels: { [key: string]: { inbound: string; outbound: string } } = {
+  'Green-B': { inbound: 'to Government Center', outbound: 'to Boston College' },
+  'Green-C': { inbound: 'to Government Center', outbound: 'to Cleveland Circle' },
+  'Green-D': { inbound: 'to Union Square', outbound: 'to Riverside' },
+  'Green-E': { inbound: 'to Medford/Tufts', outbound: 'to Heath Street' },
+}
 
 // Map station names to backend station IDs (must match backend exactly)
 const stationNameToID: { [key: string]: string } = {
@@ -121,8 +145,8 @@ const stationNameToID: { [key: string]: string } = {
   "Griggs Street": "place-grigg",
   "Harvard Avenue": "place-harvd",
   "Packards Corner": "place-brico",
-  "Babcock Street": "70136",  // Orphan platform
-  "Amory Street": "70140",  // Orphan platform
+  "Babcock Street": "place-babck",
+  "Amory Street": "place-amory",
   "BU Central": "place-bucen",
   "BU East": "place-buest",
   "Blandford Street": "place-bland",
@@ -133,9 +157,58 @@ const stationNameToID: { [key: string]: string } = {
   "Boylston": "place-boyls",
   "Park Street": "place-pktrm",
   "Government Center": "place-gover",
+  "Cleveland Circle": "place-clmnl",
+  "Englewood Ave": "place-engav",
+  "Dean Road": "place-denrd",
+  "Tappan Street": "place-tapst",
+  "Washington Square": "place-bcnwa",
+  "Fairbanks Street": "place-fbkst",
+  "Brandon Hall": "place-bndhl",
+  "Summit Avenue": "place-sumav",
+  "Coolidge Corner": "place-cool",
+  "Kent Street": "place-kntst",
+  "Hawes Street": "place-hwsst",
+  "Saint Mary's Street": "place-smary",
+  "Saint Paul Street": "place-stpul",
+  // Green-D unique stations
+  "Riverside": "place-river",
+  "Woodland": "place-woodl",
+  "Waban": "place-waban",
+  "Eliot": "place-eliot",
+  "Newton Highlands": "place-newtn",
+  "Newton Centre": "place-newto",
+  "Chestnut Hill": "place-chhil",
+  "Reservoir": "place-rsmnl",
+  "Beaconsfield": "place-bcnfd",
+  "Brookline Hills": "place-brkhl",
+  "Brookline Village": "place-bvmnl",
+  "Longwood": "place-longw",
+  "Fenway": "place-fenwy",
+  // Green-E unique stations
+  "Heath Street": "place-hsmnl",
+  "Back of the Hill": "place-bckhl",
+  "Riverway": "place-rvrwy",
+  "Mission Park": "place-mispk",
+  "Fenwood Road": "place-fenwd",
+  "Brigham Circle": "place-brmnl",
+  "Longwood Medical Area": "place-lngmd",
+  "Museum of Fine Arts": "place-mfa",
+  "Northeastern University": "place-nuniv",
+  "Symphony": "place-symcl",
+  "Prudential": "place-prmnl",
+  "Haymarket": "place-haecl",
+  "North Station": "place-north",
+  "Science Park/West End": "place-spmnl",
+  "Lechmere": "place-lech",
+  "Union Square": "place-unsqu",
+  "East Somerville": "place-esomr",
+  "Gilman Square": "place-gilmn",
+  "Magoun Square": "place-mgngl",
+  "Ball Square": "place-balsq",
+  "Medford/Tufts": "place-mdftf",
 };
 
-const supportedLines = ['Green-B'] as const
+const supportedLines = ['Green-B', 'Green-C', 'Green-D', 'Green-E'] as const
 const STORAGE_KEY = 'mbta-reliability-ui-state'
 
 interface PersistedUIState {
@@ -206,7 +279,7 @@ function App() {
     
     const fetchStatistics = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/statistics`)
+        const response = await fetch(`${API_URL}/api/statistics?route=${encodeURIComponent(selectedLine)}`)
         const data: StationStats[] = await response.json()
         
         // Convert array to map for easy lookup
@@ -238,9 +311,16 @@ function App() {
     const interval = setInterval(fetchStatistics, 10000)
 
     return () => clearInterval(interval)
-  }, [selectedStation])
+  }, [selectedLine, selectedStation])
 
   const currentStations = stationsByLine[selectedLine]
+  const lineMapView: { [key: string]: { center: [number, number]; zoom: number } } = {
+    'Green-B': { center: [42.349, -71.124], zoom: 13 },
+    'Green-C': { center: [42.344, -71.115], zoom: 13 },
+    'Green-D': { center: [42.344, -71.148], zoom: 12 },
+    'Green-E': { center: [42.363, -71.093], zoom: 12 },
+  }
+  const mapView = lineMapView[selectedLine] ?? { center: [42.348, -71.115], zoom: 13 }
 
   useEffect(() => {
     try {
@@ -373,7 +453,7 @@ function App() {
                   </span>
                 </div>
                 <p className="accuracy-label">Inbound</p>
-                <p className="direction-label">to Government Center</p>
+                <p className="direction-label">{lineDirectionLabels[selectedLine]?.inbound ?? 'to Government Center'}</p>
                 {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
               </div>
               <div className="accuracy-item">
@@ -383,7 +463,7 @@ function App() {
                   </span>
                 </div>
                 <p className="accuracy-label">Outbound</p>
-                <p className="direction-label">to Boston College</p>
+                <p className="direction-label">{lineDirectionLabels[selectedLine]?.outbound ?? 'to Outbound Terminal'}</p>
                 {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
               </div>
             </div>
@@ -437,6 +517,7 @@ function App() {
               zoom={13}
               style={{ height: '100%', width: '100%', borderRadius: '20px' }}
             >
+              <MapViewportController center={mapView.center} zoom={mapView.zoom} />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -479,6 +560,16 @@ function App() {
       </div>
     </div>
   )
+}
+
+function MapViewportController({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap()
+
+  useEffect(() => {
+    map.flyTo(center, zoom, { duration: 0.6 })
+  }, [map, center, zoom])
+
+  return null
 }
 
 export default App
