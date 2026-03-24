@@ -44,14 +44,14 @@ var stopToParentStation = make(map[string]string)
 
 // Canonical aliases so MBTA alternate IDs map to the same Green-B station keys used by frontend/backend stats.
 var canonicalStationAliases = map[string]string{
-	"70136":       "place-babck", // Babcock Street legacy platform key
-	"70137":       "place-babck", // Babcock Street legacy platform key
-	"170136":      "place-babck", // Babcock Street inbound platform variant
-	"170137":      "place-babck", // Babcock Street outbound platform variant
-	"70140":       "place-amory", // Amory Street legacy platform key
-	"70141":       "place-amory", // Amory Street legacy platform key
-	"170140":      "place-amory", // Amory Street inbound platform variant
-	"170141":      "place-amory", // Amory Street outbound platform variant
+	"70136":  "place-babck", // Babcock Street legacy platform key
+	"70137":  "place-babck", // Babcock Street legacy platform key
+	"170136": "place-babck", // Babcock Street inbound platform variant
+	"170137": "place-babck", // Babcock Street outbound platform variant
+	"70140":  "place-amory", // Amory Street legacy platform key
+	"70141":  "place-amory", // Amory Street legacy platform key
+	"170140": "place-amory", // Amory Street inbound platform variant
+	"170141": "place-amory", // Amory Street outbound platform variant
 	// Canonicalize Lechmere platform IDs to station parent ID so arrival/prediction keys match.
 	"70209": "place-lech", // Lechmere platform variant
 	"70210": "place-lech", // Lechmere platform variant
@@ -66,6 +66,22 @@ func normalizeStationKey(id string) string {
 
 // track which vehicle-stop pairs have already sent arrival notifications
 var vehicleStopArrivalSent = make(map[string]bool)
+
+func routeVehicleKey(routeName, vehicleID string) string {
+	return routeName + "|" + vehicleID
+}
+
+func routeVehiclePrefix(routeName string) string {
+	return routeName + "|"
+}
+
+func routeArrivalKey(routeName, vehicleID, tripID, stopID string) string {
+	return routeName + "-" + vehicleID + "-" + tripID + "-" + stopID
+}
+
+func routeArrivalPrefix(routeName, vehicleID string) string {
+	return routeName + "-" + vehicleID + "-"
+}
 
 var stationGeoLocation = map[string][2]float64{
 	// Green Line B - Boston College Branch
@@ -640,6 +656,7 @@ func actualArrivalMoment(routeName string) {
 				debugln("Skipping vehicle with empty ID in actualTrainInfo update")
 				continue
 			}
+			vehicleKey := routeVehicleKey(routeName, vehicle.ID)
 			observationTime, err := time.Parse(time.RFC3339, vehicle.Attributes.UpdatedAt)
 			if err != nil {
 				observationTime = time.Now()
@@ -658,7 +675,7 @@ func actualArrivalMoment(routeName string) {
 			directionID := vehicle.Attributes.DirectionID
 
 			mapMutex.Lock()
-			actualTrainInfo[vehicle.ID] = ActualData{
+			actualTrainInfo[vehicleKey] = ActualData{
 				VehicleID:       vehicle.ID,
 				ObservationTime: observationTime,
 				Status:          vehicle.Attributes.CurrentStatus,
@@ -674,29 +691,35 @@ func actualArrivalMoment(routeName string) {
 		debugf("Updated %d vehicles in actualTrainInfo\n", len(vehiclesResp.Data))
 
 		// CLEANING THE STALE RESPONSE.
-		currentVehicleIDs := make(map[string]bool)
+		currentVehicleKeys := make(map[string]bool)
 		for _, vehicle := range vehiclesResp.Data {
 			if vehicle.ID == "" {
 				continue
 			}
-			currentVehicleIDs[vehicle.ID] = true
+			currentVehicleKeys[routeVehicleKey(routeName, vehicle.ID)] = true
 		}
 
 		mapMutex.Lock()
 		staleVehicles := make([]string, 0)
-		for vehicleID := range actualTrainInfo {
-			if !currentVehicleIDs[vehicleID] {
-				delete(actualTrainInfo, vehicleID)
-				delete(vehicleNextStop, vehicleID)
-				// Clean up arrival tracking for this vehicle
-				for key := range vehicleStopArrivalSent {
-					if strings.HasPrefix(key, vehicleID+"-") {
-						delete(vehicleStopArrivalSent, key)
-					}
-				}
-				staleVehicles = append(staleVehicles, vehicleID)
-				debugf("Cleaned up stale vehicle: %s\n", vehicleID)
+		routePrefix := routeVehiclePrefix(routeName)
+		for vehicleKey, data := range actualTrainInfo {
+			if !strings.HasPrefix(vehicleKey, routePrefix) {
+				continue
 			}
+			if currentVehicleKeys[vehicleKey] {
+				continue
+			}
+			delete(actualTrainInfo, vehicleKey)
+			delete(vehicleNextStop, vehicleKey)
+			// Clean up arrival tracking only for this route + vehicle.
+			arrivalPrefix := routeArrivalPrefix(routeName, data.VehicleID)
+			for key := range vehicleStopArrivalSent {
+				if strings.HasPrefix(key, arrivalPrefix) {
+					delete(vehicleStopArrivalSent, key)
+				}
+			}
+			staleVehicles = append(staleVehicles, data.VehicleID)
+			debugf("Cleaned up stale vehicle for %s: %s\n", routeName, data.VehicleID)
 		}
 		mapMutex.Unlock()
 
@@ -724,6 +747,7 @@ func actualArrivalMoment(routeName string) {
 				debugln("Skipping vehicle with empty ID in next-stop update")
 				continue
 			}
+			vehicleKey := routeVehicleKey(routeName, vehicle.ID)
 			currentStatus := vehicle.Attributes.CurrentStatus
 
 			// GTFS-RT assumes IN_TRANSIT_TO if status is missing/empty
@@ -733,7 +757,7 @@ func actualArrivalMoment(routeName string) {
 
 			// Check if vehicle already has a next stop assigned
 			mapMutex.RLock()
-			existingNextStop, hasExistingNextStop := vehicleNextStop[vehicle.ID]
+			existingNextStop, hasExistingNextStop := vehicleNextStop[vehicleKey]
 			mapMutex.RUnlock()
 
 			// If vehicle has an existing next stop, check if it's still within 40m
@@ -763,13 +787,13 @@ func actualArrivalMoment(routeName string) {
 					// The relationships.stop.data.id already is the next stop - no API call needed
 					if vehicle.Relationships.Stop.Data != nil {
 						mapMutex.Lock()
-						vehicleNextStop[vehicle.ID] = vehicle.Relationships.Stop.Data.ID
+						vehicleNextStop[vehicleKey] = vehicle.Relationships.Stop.Data.ID
 						mapMutex.Unlock()
 						debugf("Vehicle %s (status: %s) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
 					} else {
 						// No stop relationship - clear stale entry
 						mapMutex.Lock()
-						delete(vehicleNextStop, vehicle.ID)
+						delete(vehicleNextStop, vehicleKey)
 						mapMutex.Unlock()
 						debugf("Vehicle %s (status: %s) has no stop relationship - clearing next stop\n", vehicle.ID, currentStatus)
 					}
@@ -844,7 +868,7 @@ func actualArrivalMoment(routeName string) {
 
 						if nextStop != "" {
 							mapMutex.Lock()
-							vehicleNextStop[vehicle.ID] = nextStop
+							vehicleNextStop[vehicleKey] = nextStop
 							mapMutex.Unlock()
 							debugf("Vehicle %s (status: %s) next stop after current: %s\n", vehicle.ID, currentStatus, nextStop)
 						} else {
@@ -857,7 +881,7 @@ func actualArrivalMoment(routeName string) {
 					// Handle other statuses by treating them like IN_TRANSIT_TO if a stop relationship exists
 					if vehicle.Relationships.Stop.Data != nil {
 						mapMutex.Lock()
-						vehicleNextStop[vehicle.ID] = vehicle.Relationships.Stop.Data.ID
+						vehicleNextStop[vehicleKey] = vehicle.Relationships.Stop.Data.ID
 						mapMutex.Unlock()
 						debugf("Vehicle %s (status: %s - treating as approaching) heading to: %s\n", vehicle.ID, currentStatus, vehicle.Relationships.Stop.Data.ID)
 					} else {
@@ -878,12 +902,21 @@ func actualArrivalMoment(routeName string) {
 		// Create a snapshot of the data to avoid holding locks during iteration
 		mapMutex.RLock()
 		vehicleSnapshot := make(map[string]ActualData)
-		for k, v := range actualTrainInfo {
-			vehicleSnapshot[k] = v
+		snapshotRoutePrefix := routeVehiclePrefix(routeName)
+		for vehicleKey, data := range actualTrainInfo {
+			if !strings.HasPrefix(vehicleKey, snapshotRoutePrefix) {
+				continue
+			}
+			vehicleID := strings.TrimPrefix(vehicleKey, snapshotRoutePrefix)
+			vehicleSnapshot[vehicleID] = data
 		}
 		nextStopSnapshot := make(map[string]string)
-		for k, v := range vehicleNextStop {
-			nextStopSnapshot[k] = v
+		for vehicleKey, stopID := range vehicleNextStop {
+			if !strings.HasPrefix(vehicleKey, snapshotRoutePrefix) {
+				continue
+			}
+			vehicleID := strings.TrimPrefix(vehicleKey, snapshotRoutePrefix)
+			nextStopSnapshot[vehicleID] = stopID
 		}
 		mapMutex.RUnlock()
 
@@ -898,7 +931,7 @@ func actualArrivalMoment(routeName string) {
 				)
 
 				mapMutex.Lock()
-				arrivalKey := fmt.Sprintf("%s-%s-%s", vehicleID, actualData.TripID, actualData.RelatedStop)
+				arrivalKey := routeArrivalKey(routeName, vehicleID, actualData.TripID, actualData.RelatedStop)
 				alreadySent := vehicleStopArrivalSent[arrivalKey]
 
 				if !alreadySent {
@@ -988,7 +1021,7 @@ func actualArrivalMoment(routeName string) {
 
 			if currentPollWithin {
 				// Train is within 20m of the next stop - consider it arrived
-				arrivalKey := fmt.Sprintf("%s-%s-%s", vehicleID, actualData.TripID, nextStopID)
+				arrivalKey := routeArrivalKey(routeName, vehicleID, actualData.TripID, nextStopID)
 				alreadySent := vehicleStopArrivalSent[arrivalKey]
 
 				if !alreadySent {
@@ -1054,8 +1087,9 @@ func actualArrivalMoment(routeName string) {
 			// If the vehicle is far away, clear its arrival tracking outside the main critical section
 			if shouldClearArrivals {
 				mapMutex.Lock()
+				arrivalPrefix := routeArrivalPrefix(routeName, vehicleID)
 				for key := range vehicleStopArrivalSent {
-					if strings.HasPrefix(key, vehicleID+"-") {
+					if strings.HasPrefix(key, arrivalPrefix) {
 						delete(vehicleStopArrivalSent, key)
 					}
 				}

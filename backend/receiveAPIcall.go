@@ -946,6 +946,8 @@ func main() {
 			stationRecentDiffMap = make(map[string]map[string]map[int]*RecentPredictionDiff)
 			cachedAccuracyMap = make(map[string]map[string]*StationAccuracyResponse)
 			statsMutex.Unlock()
+			// Re-seed all configured stations so /api/statistics never returns an empty station list after reset.
+			initializeStationMaps()
 
 			fmt.Printf("Full in-memory reset completed at %s | predictionStations=%d totalPredictions=%d vehicles=%d nextStops=%d dynamicStops=%d stopParents=%d arrivalSent=%d drainedArrivals=%d\n",
 				time.Now().In(location).Format(time.RFC3339),
@@ -1251,7 +1253,7 @@ func main() {
 				"70203": "place-haecl", "70204": "place-haecl",
 				"70205": "place-north", "70206": "place-north",
 				"70207": "place-spmnl", "70208": "place-spmnl",
-				"70209": "place-lech",  "70210": "place-lech",
+				"70209": "place-lech", "70210": "place-lech",
 				// Union Square: use parent ID directly (GLX station, platform IDs resolved dynamically)
 				"place-unsqu": "place-unsqu",
 			},
@@ -1277,7 +1279,7 @@ func main() {
 				"70203": "place-haecl", "70204": "place-haecl",
 				"70205": "place-north", "70206": "place-north",
 				"70207": "place-spmnl", "70208": "place-spmnl",
-				"70209": "place-lech",  "70210": "place-lech",
+				"70209": "place-lech", "70210": "place-lech",
 				// GLX stations: use parent IDs directly (platform IDs resolved dynamically)
 				"place-esomr": "place-esomr",
 				"place-gilmn": "place-gilmn",
