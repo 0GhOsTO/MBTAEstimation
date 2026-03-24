@@ -2,7 +2,7 @@
 // cd f:\CS\ProjectGithub\MBTAEstimation\backend; go mod init mbta-backend
 // Create .env file in backend folder with content:
 // MBTA_API_KEY=your_actual_api_key_here
-// MBTA_API_KEY_c=your_green_c_api_key_here
+// MBTA_API_KEY_C=your_green_c_api_key_here
 package main
 
 import (
@@ -28,11 +28,11 @@ const (
 	routeGreenE = "Green-E"
 )
 
-var requiredEnvByRoute = map[string]string{
-	routeGreenB: "MBTA_API_KEY",
-	routeGreenC: "MBTA_API_KEY_c",
-	routeGreenD: "MBTA_API_KEY_D",
-	routeGreenE: "MBTA_API_KEY_E",
+var requiredEnvByRoute = map[string][]string{
+	routeGreenB: []string{"MBTA_API_KEY"},
+	routeGreenC: []string{"MBTA_API_KEY_C", "MBTA_API_KEY_c"},
+	routeGreenD: []string{"MBTA_API_KEY_D"},
+	routeGreenE: []string{"MBTA_API_KEY_E"},
 }
 
 var routeAPIKeys = make(map[string]string)
@@ -227,10 +227,16 @@ type PredictionsResponse struct {
 
 func loadRouteAPIKeysFromEnv(lookup func(string) string) (map[string]string, error) {
 	keys := make(map[string]string, len(requiredEnvByRoute))
-	for route, envVar := range requiredEnvByRoute {
-		key := strings.TrimSpace(lookup(envVar))
+	for route, envVars := range requiredEnvByRoute {
+		key := ""
+		for _, envVar := range envVars {
+			key = strings.TrimSpace(lookup(envVar))
+			if key != "" {
+				break
+			}
+		}
 		if key == "" {
-			return nil, fmt.Errorf("%s environment variable not set", envVar)
+			return nil, fmt.Errorf("%s environment variable not set", strings.Join(envVars, " or "))
 		}
 		keys[route] = key
 	}

@@ -119,7 +119,11 @@ npm run dev
 cd backend
 go mod init mbta-backend
 go mod tidy
-# Create .env file with: MBTA_API_KEY=your_key_here
+# Create .env file with:
+# MBTA_API_KEY=your_green_b_api_key_here
+# MBTA_API_KEY_C=your_green_c_api_key_here
+# MBTA_API_KEY_D=your_green_d_api_key_here
+# MBTA_API_KEY_E=your_green_e_api_key_here
 go run receiveAPIcall.go
 ```
 
