@@ -2,6 +2,7 @@
 // cd f:\CS\ProjectGithub\MBTAEstimation\backend; go mod init mbta-backend
 // Create .env file in backend folder with content:
 // MBTA_API_KEY=your_actual_api_key_here
+// MBTA_API_KEY_c=your_green_c_api_key_here
 package main
 
 import (
@@ -13,17 +14,32 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
-// grab the API key.
-var key string
+const (
+	routeGreenB = "Green-B"
+	routeGreenC = "Green-C"
+	routeGreenD = "Green-D"
+	routeGreenE = "Green-E"
+)
+
+var requiredEnvByRoute = map[string]string{
+	routeGreenB: "MBTA_API_KEY",
+	routeGreenC: "MBTA_API_KEY_c",
+	routeGreenD: "MBTA_API_KEY_D",
+	routeGreenE: "MBTA_API_KEY_E",
+}
+
+var routeAPIKeys = make(map[string]string)
 
 // stop id: {in/outbound : {vehicle id: prediction data}}}
-var predictionDataMap = make(map[string]map[int]map[string][]PredictionData)
+// Map structure: route -> stationID -> direction -> vehicleID -> []PredictionData
+var predictionDataMap = make(map[string]map[string]map[int]map[string][]PredictionData)
 
 // mutex for protecting prediction map from concurrent access
 var predictionMutex sync.RWMutex
@@ -36,17 +52,17 @@ type StationStats struct {
 }
 
 // Prediction accuracy statistics by station and direction
-// Map structure: stationID -> direction (0=outbound, 1=inbound) -> stats
-var stationAccuracyMap = make(map[string]map[int]*StationStats)
+// Map structure: route -> stationID -> direction (0=outbound, 1=inbound) -> stats
+var stationAccuracyMap = make(map[string]map[string]map[int]*StationStats)
 var statsMutex sync.Mutex
 
 // Cached accuracy rates for quick API responses
-// Map structure: stationID -> StationAccuracyResponse (with calculated accuracy)
-var cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
+// Map structure: route -> stationID -> StationAccuracyResponse (with calculated accuracy)
+var cachedAccuracyMap = make(map[string]map[string]*StationAccuracyResponse)
 
 // Most recent arrival prediction difference by station and direction.
-// Map structure: stationID -> direction (0=outbound, 1=inbound) -> diff metadata
-var stationRecentDiffMap = make(map[string]map[int]*RecentPredictionDiff)
+// Map structure: route -> stationID -> direction (0=outbound, 1=inbound) -> diff metadata
+var stationRecentDiffMap = make(map[string]map[string]map[int]*RecentPredictionDiff)
 
 // Map of all Green Line B station IDs to friendly names
 var greenBStationNames = map[string]string{
@@ -60,10 +76,9 @@ var greenBStationNames = map[string]string{
 	"place-alsgr": "Allston Street",
 	"place-grigg": "Griggs Street",
 	"place-harvd": "Harvard Avenue",
-	"place-brico": "Packards Corner",
-	// Orphan platforms (no parent station in MBTA API)
-	"70136":       "Babcock Street",
-	"70140":       "Amory Street",
+	"place-brico": "Packard's Corner",
+	"place-babck": "Babcock Street",
+	"place-amory": "Amory Street",
 	"place-bucen": "Boston University Central",
 	"place-buest": "Boston University East",
 	"place-bland": "Blandford Street",
@@ -74,6 +89,92 @@ var greenBStationNames = map[string]string{
 	"place-boyls": "Boylston",
 	"place-pktrm": "Park Street",
 	"place-gover": "Government Center",
+}
+
+var greenCStationNames = map[string]string{
+	"place-clmnl": "Cleveland Circle",
+	"place-engav": "Englewood Avenue",
+	"place-denrd": "Dean Road",
+	"place-tapst": "Tappan Street",
+	"place-bcnwa": "Washington Square",
+	"place-fbkst": "Fairbanks Street",
+	"place-bndhl": "Brandon Hall",
+	"place-sumav": "Summit Avenue",
+	"place-cool":  "Coolidge Corner",
+	"place-stpul": "Saint Paul Street",
+	"place-kntst": "Kent Street",
+	"place-hwsst": "Hawes Street",
+	"place-smary": "Saint Mary's Street",
+	"place-kencl": "Kenmore",
+	"place-hymnl": "Hynes Convention Center",
+	"place-coecl": "Copley",
+	"place-armnl": "Arlington",
+	"place-boyls": "Boylston",
+	"place-pktrm": "Park Street",
+	"place-gover": "Government Center",
+}
+
+var greenDStationNames = map[string]string{
+	"place-river": "Riverside",
+	"place-woodl": "Woodland",
+	"place-waban": "Waban",
+	"place-eliot": "Eliot",
+	"place-newtn": "Newton Highlands",
+	"place-newto": "Newton Centre",
+	"place-chhil": "Chestnut Hill",
+	"place-rsmnl": "Reservoir",
+	"place-bcnfd": "Beaconsfield",
+	"place-brkhl": "Brookline Hills",
+	"place-bvmnl": "Brookline Village",
+	"place-longw": "Longwood",
+	"place-fenwy": "Fenway",
+	"place-kencl": "Kenmore",
+	"place-hymnl": "Hynes Convention Center",
+	"place-coecl": "Copley",
+	"place-armnl": "Arlington",
+	"place-boyls": "Boylston",
+	"place-pktrm": "Park Street",
+	"place-gover": "Government Center",
+	"place-haecl": "Haymarket",
+	"place-north": "North Station",
+	"place-spmnl": "Science Park/West End",
+	"place-lech":  "Lechmere",
+	"place-unsqu": "Union Square",
+}
+
+var greenEStationNames = map[string]string{
+	"place-hsmnl": "Heath Street",
+	"place-bckhl": "Back of the Hill",
+	"place-rvrwy": "Riverway",
+	"place-mispk": "Mission Park",
+	"place-fenwd": "Fenwood Road",
+	"place-brmnl": "Brigham Circle",
+	"place-lngmd": "Longwood Medical Area",
+	"place-mfa":   "Museum of Fine Arts",
+	"place-nuniv": "Northeastern University",
+	"place-symcl": "Symphony",
+	"place-prmnl": "Prudential",
+	"place-coecl": "Copley",
+	"place-armnl": "Arlington",
+	"place-boyls": "Boylston",
+	"place-pktrm": "Park Street",
+	"place-gover": "Government Center",
+	"place-haecl": "Haymarket",
+	"place-north": "North Station",
+	"place-spmnl": "Science Park/West End",
+	"place-lech":  "Lechmere",
+	"place-esomr": "East Somerville",
+	"place-gilmn": "Gilman Square",
+	"place-mgngl": "Magoun Square",
+	"place-balsq": "Ball Square",
+	"place-mdftf": "Medford/Tufts",
+}
+
+var stationNamesByRoute = map[string]map[string]string{
+	routeGreenB: greenBStationNames,
+	routeGreenC: greenCStationNames,
+	routeGreenD: greenDStationNames,
+	routeGreenE: greenEStationNames,
 }
 
 // Struct to hold prediction data
@@ -124,29 +225,81 @@ type PredictionsResponse struct {
 	} `json:"data"`
 }
 
+func loadRouteAPIKeysFromEnv(lookup func(string) string) (map[string]string, error) {
+	keys := make(map[string]string, len(requiredEnvByRoute))
+	for route, envVar := range requiredEnvByRoute {
+		key := strings.TrimSpace(lookup(envVar))
+		if key == "" {
+			return nil, fmt.Errorf("%s environment variable not set", envVar)
+		}
+		keys[route] = key
+	}
+	return keys, nil
+}
+
+func normalizeRoute(route string) (string, error) {
+	trimmed := strings.TrimSpace(route)
+	if trimmed == "" {
+		return routeGreenB, nil
+	}
+	switch trimmed {
+	case routeGreenB, routeGreenC, routeGreenD, routeGreenE:
+		return trimmed, nil
+	default:
+		return "", fmt.Errorf("unsupported route: %s", route)
+	}
+}
+
+func apiKeyForRoute(route string) (string, error) {
+	normalizedRoute, err := normalizeRoute(route)
+	if err != nil {
+		return "", err
+	}
+	key, ok := routeAPIKeys[normalizedRoute]
+	if !ok || strings.TrimSpace(key) == "" {
+		return "", fmt.Errorf("no API key configured for route %s", normalizedRoute)
+	}
+	return key, nil
+}
+
+func routeNamesForStats(route string) map[string]string {
+	if names, ok := stationNamesByRoute[route]; ok {
+		return names
+	}
+	return map[string]string{}
+}
+
 func init() {
 	err := godotenv.Load()
 	if err != nil {
 		fmt.Println("No .env file found (this is normal in production)")
 	}
-	key = os.Getenv("MBTA_API_KEY")
-	if key == "" {
-		panic("MBTA_API_KEY environment variable not set! Please set it in your deployment platform's environment variables.")
+	keys, err := loadRouteAPIKeysFromEnv(os.Getenv)
+	if err != nil {
+		panic(err)
 	}
-	fmt.Println("MBTA API key loaded successfully")
+	routeAPIKeys = keys
+	fmt.Printf("MBTA API keys loaded successfully for routes: %s, %s, %s, %s\n", routeGreenB, routeGreenC, routeGreenD, routeGreenE)
 }
 
-func fetchPrediction_single(stopID string, direction int, parentStationID string) (PredictionData, string, error) {
+func fetchPredictionSingle(route, stopID string, direction int, parentStationID string) (PredictionData, string, error) {
 	// constructing the request.
 	// stopID is the individual platform ID (e.g., "70106"), parentStationID is for storage (e.g., "place-lake")
-	// Fetch predictions for Green-B only to avoid mixing with C/D/E trains on shared downtown platforms.
+	normalizedRoute, err := normalizeRoute(route)
+	if err != nil {
+		return PredictionData{}, "nil", err
+	}
+	apiKey, err := apiKeyForRoute(normalizedRoute)
+	if err != nil {
+		return PredictionData{}, "nil", err
+	}
 	// Keep the same page limit for now to minimize API load while improving relevance.
-	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&filter[route]=Green-B&sort=arrival_time&page[limit]=2", stopID, direction)
+	url := fmt.Sprintf("https://api-v3.mbta.com/predictions?filter[stop]=%s&filter[direction_id]=%d&filter[route]=%s&sort=arrival_time&page[limit]=2", stopID, direction, normalizedRoute)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
 		return PredictionData{}, "nil", err
 	}
-	req.Header.Set("x-api-key", key)
+	req.Header.Set("x-api-key", apiKey)
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	resp, err := client.Do(req)
@@ -215,23 +368,26 @@ func fetchPrediction_single(stopID string, direction int, parentStationID string
 	storageKey = normalizeStationKey(storageKey)
 
 	predictionMutex.Lock()
-	if predictionDataMap[storageKey] == nil {
-		predictionDataMap[storageKey] = make(map[int]map[string][]PredictionData)
+	if predictionDataMap[normalizedRoute] == nil {
+		predictionDataMap[normalizedRoute] = make(map[string]map[int]map[string][]PredictionData)
 	}
-	if predictionDataMap[storageKey][direction] == nil {
-		predictionDataMap[storageKey][direction] = make(map[string][]PredictionData)
+	if predictionDataMap[normalizedRoute][storageKey] == nil {
+		predictionDataMap[normalizedRoute][storageKey] = make(map[int]map[string][]PredictionData)
+	}
+	if predictionDataMap[normalizedRoute][storageKey][direction] == nil {
+		predictionDataMap[normalizedRoute][storageKey][direction] = make(map[string][]PredictionData)
 	}
 
 	// Store each prediction by its vehicle ID
 	storedCount := 0
 	for _, pred := range predictions {
 		if pred.VehicleID != "" && pred.ArrivalTime != nil {
-			predictionDataMap[storageKey][direction][pred.VehicleID] = append(
-				predictionDataMap[storageKey][direction][pred.VehicleID],
+			predictionDataMap[normalizedRoute][storageKey][direction][pred.VehicleID] = append(
+				predictionDataMap[normalizedRoute][storageKey][direction][pred.VehicleID],
 				pred,
 			)
-			debugf("Stored prediction: Platform %s Station %s, Dir %d, Vehicle %s (Arrival: %v)\n",
-				stopID, storageKey, direction, pred.VehicleID, pred.ArrivalTime)
+			debugf("Stored prediction: Route %s Platform %s Station %s, Dir %d, Vehicle %s (Arrival: %v)\n",
+				normalizedRoute, stopID, storageKey, direction, pred.VehicleID, pred.ArrivalTime)
 			storedCount++
 		}
 	}
@@ -263,33 +419,39 @@ func cleanupOldPredictions() {
 	cutoffTime := time.Now().Add(-120 * time.Minute)
 	cleanedCount := 0
 
-	for stopID, directions := range predictionDataMap {
-		for direction, vehicles := range directions {
-			for vehicleID, predictions := range vehicles {
-				// Filter out old predictions
-				validPredictions := make([]PredictionData, 0)
-				for _, pred := range predictions {
-					if pred.ObservationTime.After(cutoffTime) {
-						validPredictions = append(validPredictions, pred)
+	for route, stations := range predictionDataMap {
+		for stopID, directions := range stations {
+			for direction, vehicles := range directions {
+				for vehicleID, predictions := range vehicles {
+					// Filter out old predictions
+					validPredictions := make([]PredictionData, 0)
+					for _, pred := range predictions {
+						if pred.ObservationTime.After(cutoffTime) {
+							validPredictions = append(validPredictions, pred)
+						} else {
+							cleanedCount++
+						}
+					}
+
+					if len(validPredictions) > 0 {
+						predictionDataMap[route][stopID][direction][vehicleID] = validPredictions
 					} else {
-						cleanedCount++
+						delete(predictionDataMap[route][stopID][direction], vehicleID)
 					}
 				}
-
-				if len(validPredictions) > 0 {
-					predictionDataMap[stopID][direction][vehicleID] = validPredictions
-				} else {
-					delete(predictionDataMap[stopID][direction], vehicleID)
+				// Clean up empty direction maps
+				if len(predictionDataMap[route][stopID][direction]) == 0 {
+					delete(predictionDataMap[route][stopID], direction)
 				}
 			}
-			// Clean up empty direction maps
-			if len(predictionDataMap[stopID][direction]) == 0 {
-				delete(predictionDataMap[stopID], direction)
+			// Clean up empty stop maps
+			if len(predictionDataMap[route][stopID]) == 0 {
+				delete(predictionDataMap[route], stopID)
 			}
 		}
-		// Clean up empty stop maps
-		if len(predictionDataMap[stopID]) == 0 {
-			delete(predictionDataMap, stopID)
+		// Clean up empty route maps
+		if len(predictionDataMap[route]) == 0 {
+			delete(predictionDataMap, route)
 		}
 	}
 
@@ -358,57 +520,73 @@ func selectMiddlePrediction(predictions []PredictionData, arrivalTime time.Time)
 	return valid[middleIndex], true
 }
 
-// Initialize all Green-B stations with zero values in the accuracy maps
+// Initialize configured stations with zero values in the accuracy maps.
 func initializeStationMaps() {
 	statsMutex.Lock()
 	defer statsMutex.Unlock()
 
-	for stationID, stationName := range greenBStationNames {
-		// Initialize stationAccuracyMap if needed
-		if stationAccuracyMap[stationID] == nil {
-			stationAccuracyMap[stationID] = make(map[int]*StationStats)
+	for route, stationNames := range stationNamesByRoute {
+		if stationAccuracyMap[route] == nil {
+			stationAccuracyMap[route] = make(map[string]map[int]*StationStats)
 		}
-		// Initialize both directions with zero values
-		if stationAccuracyMap[stationID][0] == nil {
-			stationAccuracyMap[stationID][0] = &StationStats{} // Outbound
+		if cachedAccuracyMap[route] == nil {
+			cachedAccuracyMap[route] = make(map[string]*StationAccuracyResponse)
 		}
-		if stationAccuracyMap[stationID][1] == nil {
-			stationAccuracyMap[stationID][1] = &StationStats{} // Inbound
+		if stationRecentDiffMap[route] == nil {
+			stationRecentDiffMap[route] = make(map[string]map[int]*RecentPredictionDiff)
 		}
+		for stationID, stationName := range stationNames {
+			if stationAccuracyMap[route][stationID] == nil {
+				stationAccuracyMap[route][stationID] = make(map[int]*StationStats)
+			}
+			if stationAccuracyMap[route][stationID][0] == nil {
+				stationAccuracyMap[route][stationID][0] = &StationStats{} // Outbound
+			}
+			if stationAccuracyMap[route][stationID][1] == nil {
+				stationAccuracyMap[route][stationID][1] = &StationStats{} // Inbound
+			}
 
-		// Initialize cached accuracy response for this station
-		cachedAccuracyMap[stationID] = &StationAccuracyResponse{
-			StationID:                 stationID,
-			StationName:               stationName,
-			InboundAccuracy:           0.0,
-			InboundTotal:              0,
-			OutboundAccuracy:          0.0,
-			OutboundTotal:             0,
-			InboundRecentDiffMinutes:  nil,
-			OutboundRecentDiffMinutes: nil,
+			cachedAccuracyMap[route][stationID] = &StationAccuracyResponse{
+				StationID:                 stationID,
+				StationName:               stationName,
+				InboundAccuracy:           0.0,
+				InboundTotal:              0,
+				OutboundAccuracy:          0.0,
+				OutboundTotal:             0,
+				InboundRecentDiffMinutes:  nil,
+				OutboundRecentDiffMinutes: nil,
+			}
 		}
+		fmt.Printf("Initialized accuracy maps for %d stations on %s\n", len(stationNames), route)
 	}
-
-	fmt.Printf("??Initialized accuracy maps for %d Green-B stations\n", len(greenBStationNames))
 }
 
-// Update cached accuracy for a specific station (call this after updating stats)
-func updateCachedAccuracy(stationID string) {
+// Update cached accuracy for a specific route/station (call this after updating stats).
+func updateCachedAccuracy(route, stationID string) {
 	// Must be called with statsMutex already locked
-	if cachedAccuracyMap[stationID] == nil {
-		cachedAccuracyMap[stationID] = &StationAccuracyResponse{
+	if cachedAccuracyMap[route] == nil {
+		cachedAccuracyMap[route] = make(map[string]*StationAccuracyResponse)
+	}
+	if stationAccuracyMap[route] == nil {
+		stationAccuracyMap[route] = make(map[string]map[int]*StationStats)
+	}
+	if stationRecentDiffMap[route] == nil {
+		stationRecentDiffMap[route] = make(map[string]map[int]*RecentPredictionDiff)
+	}
+	if cachedAccuracyMap[route][stationID] == nil {
+		cachedAccuracyMap[route][stationID] = &StationAccuracyResponse{
 			StationID:   stationID,
-			StationName: greenBStationNames[stationID],
+			StationName: routeNamesForStats(route)[stationID],
 		}
-		if cachedAccuracyMap[stationID].StationName == "" {
-			cachedAccuracyMap[stationID].StationName = stationID
+		if cachedAccuracyMap[route][stationID].StationName == "" {
+			cachedAccuracyMap[route][stationID].StationName = stationID
 		}
 	}
 
-	cached := cachedAccuracyMap[stationID]
+	cached := cachedAccuracyMap[route][stationID]
 
 	// Update inbound stats (direction 1)
-	if stats, exists := stationAccuracyMap[stationID][1]; exists {
+	if stats, exists := stationAccuracyMap[route][stationID][1]; exists {
 		cached.InboundTotal = stats.Total
 		if stats.Total > 0 {
 			cached.InboundAccuracy = float64(stats.Correct) / float64(stats.Total) * 100
@@ -418,7 +596,7 @@ func updateCachedAccuracy(stationID string) {
 	}
 
 	// Update outbound stats (direction 0)
-	if stats, exists := stationAccuracyMap[stationID][0]; exists {
+	if stats, exists := stationAccuracyMap[route][stationID][0]; exists {
 		cached.OutboundTotal = stats.Total
 		if stats.Total > 0 {
 			cached.OutboundAccuracy = float64(stats.Correct) / float64(stats.Total) * 100
@@ -428,7 +606,7 @@ func updateCachedAccuracy(stationID string) {
 	}
 
 	// Update most recent arrival prediction difference (direction 1 = inbound)
-	if dirData, exists := stationRecentDiffMap[stationID]; exists {
+	if dirData, exists := stationRecentDiffMap[route][stationID]; exists {
 		if recent, hasInbound := dirData[1]; hasInbound && recent != nil {
 			diff := recent.DifferenceMinutes
 			cached.InboundRecentDiffMinutes = &diff
@@ -447,8 +625,16 @@ func updateCachedAccuracy(stationID string) {
 	}
 
 	// Debug log to verify cache update
-	debugf("Updated cache for %s: Inbound=%.2f%% (%d total), Outbound=%.2f%% (%d total)\n",
-		stationID, cached.InboundAccuracy, cached.InboundTotal, cached.OutboundAccuracy, cached.OutboundTotal)
+	debugf("Updated cache for %s/%s: Inbound=%.2f%% (%d total), Outbound=%.2f%% (%d total)\n",
+		route, stationID, cached.InboundAccuracy, cached.InboundTotal, cached.OutboundAccuracy, cached.OutboundTotal)
+}
+
+func statisticsRouteFromRequest(r *http.Request) (string, error) {
+	rawRoute := strings.TrimSpace(r.URL.Query().Get("route"))
+	if rawRoute == "" {
+		return routeGreenB, nil // Backward compatibility default.
+	}
+	return normalizeRoute(rawRoute)
 }
 
 // HTTP handler for debug/health check
@@ -467,35 +653,70 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 	predictionMutex.RLock()
 	statsMutex.Lock()
 
-	// Count predictions
-	predictionCount := 0
-	for _, directions := range predictionDataMap {
-		for _, vehicles := range directions {
-			for _, predictions := range vehicles {
-				predictionCount += len(predictions)
+	predictionsByRoute := map[string]int{
+		routeGreenB: 0,
+		routeGreenC: 0,
+		routeGreenD: 0,
+		routeGreenE: 0,
+	}
+	stationsByRoute := map[string]int{
+		routeGreenB: 0,
+		routeGreenC: 0,
+		routeGreenD: 0,
+		routeGreenE: 0,
+	}
+	arrivalsByRoute := map[string]int{
+		routeGreenB: 0,
+		routeGreenC: 0,
+		routeGreenD: 0,
+		routeGreenE: 0,
+	}
+	totalPredictionCount := 0
+	totalStationsTracked := 0
+	totalArrivals := 0
+
+	for route, stations := range predictionDataMap {
+		for _, directions := range stations {
+			for _, vehicles := range directions {
+				for _, predictions := range vehicles {
+					predictionsByRoute[route] += len(predictions)
+					totalPredictionCount += len(predictions)
+				}
 			}
 		}
 	}
-
-	// Count stations with stats
-	stationCount := len(stationAccuracyMap)
-	totalArrivals := 0
-	for _, directions := range stationAccuracyMap {
-		for _, stats := range directions {
-			totalArrivals += stats.Total
+	for route, stations := range stationAccuracyMap {
+		stationsByRoute[route] = len(stations)
+		totalStationsTracked += len(stations)
+		for _, directions := range stations {
+			for _, stats := range directions {
+				arrivalsByRoute[route] += stats.Total
+				totalArrivals += stats.Total
+			}
 		}
 	}
 
 	statsMutex.Unlock()
 	predictionMutex.RUnlock()
 
+	keysLoaded := map[string]bool{
+		routeGreenB: strings.TrimSpace(routeAPIKeys[routeGreenB]) != "",
+		routeGreenC: strings.TrimSpace(routeAPIKeys[routeGreenC]) != "",
+		routeGreenD: strings.TrimSpace(routeAPIKeys[routeGreenD]) != "",
+		routeGreenE: strings.TrimSpace(routeAPIKeys[routeGreenE]) != "",
+	}
+
 	response := map[string]interface{}{
-		"status":            "running",
-		"api_key_set":       key != "",
-		"predictions_count": predictionCount,
-		"stations_tracked":  stationCount,
-		"total_arrivals":    totalArrivals,
-		"timestamp":         time.Now().Format(time.RFC3339),
+		"status":                   "running",
+		"routes_active":            []string{routeGreenB, routeGreenC, routeGreenD, routeGreenE},
+		"api_keys_loaded_by_route": keysLoaded,
+		"predictions_count":        totalPredictionCount,
+		"predictions_by_route":     predictionsByRoute,
+		"stations_tracked":         totalStationsTracked,
+		"stations_by_route":        stationsByRoute,
+		"total_arrivals":           totalArrivals,
+		"arrivals_by_route":        arrivalsByRoute,
+		"timestamp":                time.Now().Format(time.RFC3339),
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -514,13 +735,25 @@ func handleGetStatistics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	route, err := statisticsRouteFromRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
 	statsMutex.Lock()
 	defer statsMutex.Unlock()
 
-	// Return all stations from the cached map (includes stations with 0 arrivals)
-	response := make([]StationAccuracyResponse, 0, len(cachedAccuracyMap))
+	routeCache := cachedAccuracyMap[route]
+	if routeCache == nil {
+		routeCache = map[string]*StationAccuracyResponse{}
+	}
+
+	// Return all stations from the route cache (includes stations with 0 arrivals).
+	response := make([]StationAccuracyResponse, 0, len(routeCache))
 	nonZeroCount := 0
-	for _, stationData := range cachedAccuracyMap {
+	for _, stationData := range routeCache {
 		response = append(response, *stationData)
 		if stationData.InboundTotal > 0 || stationData.OutboundTotal > 0 {
 			nonZeroCount++
@@ -528,7 +761,7 @@ func handleGetStatistics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Debug log to show what we're returning
-	debugf("/api/statistics called: Returning %d stations (%d with data)\n", len(response), nonZeroCount)
+	debugf("/api/statistics called for %s: Returning %d stations (%d with data)\n", route, len(response), nonZeroCount)
 	if nonZeroCount > 0 {
 		// Show first station with non-zero data for debugging
 		for _, station := range response {
@@ -564,7 +797,7 @@ func main_test_pred() {
 		// Uncertainty by station vs uncertainty by the train ID.
 
 		//=======TESTING==========
-		pred, _, err := fetchPrediction_single("70135", 0, "place-brico") // example stop ID (Packards Corner)
+		pred, _, err := fetchPredictionSingle(routeGreenB, "70135", 0, "place-brico") // example stop ID (Packards Corner)
 		if err != nil {
 			panic(err)
 		}
@@ -663,7 +896,7 @@ func main() {
 			// Flush prediction cache.
 			predictionMutex.Lock()
 			predictionStations := len(predictionDataMap)
-			predictionDataMap = make(map[string]map[int]map[string][]PredictionData)
+			predictionDataMap = make(map[string]map[string]map[int]map[string][]PredictionData)
 			predictionMutex.Unlock()
 
 			// Flush runtime vehicle/stop caches.
@@ -696,14 +929,16 @@ func main() {
 			// Flush accuracy stats/cache.
 			statsMutex.Lock()
 			totalPredictions := 0
-			for _, directions := range stationAccuracyMap {
-				for _, stats := range directions {
-					totalPredictions += stats.Total
+			for _, stations := range stationAccuracyMap {
+				for _, directions := range stations {
+					for _, stats := range directions {
+						totalPredictions += stats.Total
+					}
 				}
 			}
-			stationAccuracyMap = make(map[string]map[int]*StationStats)
-			stationRecentDiffMap = make(map[string]map[int]*RecentPredictionDiff)
-			cachedAccuracyMap = make(map[string]*StationAccuracyResponse)
+			stationAccuracyMap = make(map[string]map[string]map[int]*StationStats)
+			stationRecentDiffMap = make(map[string]map[string]map[int]*RecentPredictionDiff)
+			cachedAccuracyMap = make(map[string]map[string]*StationAccuracyResponse)
 			statsMutex.Unlock()
 
 			fmt.Printf("Full in-memory reset completed at %s | predictionStations=%d totalPredictions=%d vehicles=%d nextStops=%d dynamicStops=%d stopParents=%d arrivalSent=%d drainedArrivals=%d\n",
@@ -743,16 +978,25 @@ func main() {
 		}
 	}()
 
-	// Start goroutine to monitor actual train arrivals
-	go actualArrivalMoment("Green-B")
-	fmt.Println("Started monitoring Green-B line for arrivals...")
+	// Start goroutines to monitor actual train arrivals by route.
+	go actualArrivalMoment(routeGreenB)
+	go actualArrivalMoment(routeGreenC)
+	go actualArrivalMoment(routeGreenD)
+	go actualArrivalMoment(routeGreenE)
+	fmt.Printf("Started monitoring %s, %s, %s and %s lines for arrivals...\n", routeGreenB, routeGreenC, routeGreenD, routeGreenE)
 	// =============================LISTENING====================================
 	// Start goroutine to constantly listen for arrivals
 	go func() {
 		fmt.Println("Started listening to ArrivalChannel...")
 		// this is equivalent to <-Arrival Channel.
 		for arrival := range ArrivalChannel {
+			arrivalRoute, err := normalizeRoute(arrival.Route)
+			if err != nil {
+				debugf("Skipping arrival with unsupported route %q: %v\n", arrival.Route, err)
+				continue
+			}
 			debugln("\n=== TRAIN ARRIVAL DETECTED ===")
+			debugf("Route: %s\n", arrivalRoute)
 			debugf("Station (Place ID): %s\n", arrival.StationPlaceID)
 			debugf("Station (Stop ID): %s\n", arrival.StationStopID)
 			debugf("Train ID: %s\n", arrival.TrainID)
@@ -763,10 +1007,10 @@ func main() {
 			// Compare with prediction data and score accuracy
 			// Use StationPlaceID (parent station) to match how predictions are stored
 			predictionMutex.RLock()
-			debugf("Looking up predictions for Place ID: %s, Direction: %d, Train: %s\n", arrival.StationPlaceID, arrival.Direction, arrival.TrainID)
+			debugf("Looking up predictions for Route %s, Place ID: %s, Direction: %d, Train: %s\n", arrivalRoute, arrival.StationPlaceID, arrival.Direction, arrival.TrainID)
 
 			// Debug: Show what's in predictionDataMap for this station
-			if stationPreds, hasStation := predictionDataMap[arrival.StationPlaceID]; hasStation {
+			if stationPreds, hasStation := predictionDataMap[arrivalRoute][arrival.StationPlaceID]; hasStation {
 				if dirPreds, hasDir := stationPreds[arrival.Direction]; hasDir {
 					debugf("  Found direction %d data with %d vehicles: %v\n", arrival.Direction, len(dirPreds), func() []string {
 						keys := make([]string, 0, len(dirPreds))
@@ -782,7 +1026,7 @@ func main() {
 				debugf("  No predictions stored for station %s\n", arrival.StationPlaceID)
 			}
 
-			if predictions, exists := predictionDataMap[arrival.StationPlaceID][arrival.Direction][arrival.TrainID]; exists {
+			if predictions, exists := predictionDataMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction][arrival.TrainID]; exists {
 				debugf("Found %d prediction(s) for this train:\n", len(predictions))
 				targetObservationTime := arrival.ArrivalTime.Add(-5 * time.Minute)
 				gradedCount := 0
@@ -835,26 +1079,32 @@ func main() {
 
 				if gradedCount > 0 || hasMiddlePrediction {
 					statsMutex.Lock()
-					if stationAccuracyMap[arrival.StationPlaceID] == nil {
-						stationAccuracyMap[arrival.StationPlaceID] = make(map[int]*StationStats)
+					if stationAccuracyMap[arrivalRoute] == nil {
+						stationAccuracyMap[arrivalRoute] = make(map[string]map[int]*StationStats)
 					}
-					if stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] == nil {
-						stationAccuracyMap[arrival.StationPlaceID][arrival.Direction] = &StationStats{}
+					if stationAccuracyMap[arrivalRoute][arrival.StationPlaceID] == nil {
+						stationAccuracyMap[arrivalRoute][arrival.StationPlaceID] = make(map[int]*StationStats)
+					}
+					if stationAccuracyMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction] == nil {
+						stationAccuracyMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction] = &StationStats{}
 					}
 
 					if gradedCount > 0 {
 						// Update statistics for this arrival with all eligible predictions.
-						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+						stats := stationAccuracyMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction]
 						stats.Total += gradedCount
 						stats.Correct += correctCount
 						stats.Incorrect += incorrectCount
 					}
 
 					if hasMiddlePrediction && middlePrediction.ArrivalTime != nil {
-						if stationRecentDiffMap[arrival.StationPlaceID] == nil {
-							stationRecentDiffMap[arrival.StationPlaceID] = make(map[int]*RecentPredictionDiff)
+						if stationRecentDiffMap[arrivalRoute] == nil {
+							stationRecentDiffMap[arrivalRoute] = make(map[string]map[int]*RecentPredictionDiff)
 						}
-						stationRecentDiffMap[arrival.StationPlaceID][arrival.Direction] = &RecentPredictionDiff{
+						if stationRecentDiffMap[arrivalRoute][arrival.StationPlaceID] == nil {
+							stationRecentDiffMap[arrivalRoute][arrival.StationPlaceID] = make(map[int]*RecentPredictionDiff)
+						}
+						stationRecentDiffMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction] = &RecentPredictionDiff{
 							DifferenceMinutes:         middleDiffMinutes,
 							ArrivalTime:               arrival.ArrivalTime,
 							PredictionObservationTime: middlePrediction.ObservationTime,
@@ -863,10 +1113,10 @@ func main() {
 						}
 					}
 
-					updateCachedAccuracy(arrival.StationPlaceID)
+					updateCachedAccuracy(arrivalRoute, arrival.StationPlaceID)
 
 					if gradedCount > 0 {
-						stats := stationAccuracyMap[arrival.StationPlaceID][arrival.Direction]
+						stats := stationAccuracyMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction]
 						accuracy := 0.0
 						if stats.Total > 0 {
 							accuracy = float64(stats.Correct) / float64(stats.Total) * 100
@@ -875,7 +1125,7 @@ func main() {
 						if arrival.Direction == 1 {
 							directionName = "Inbound"
 						}
-						debugf("\nSTATION STATISTICS [%s - %s]:\n", arrival.StationPlaceID, directionName)
+						debugf("\nSTATION STATISTICS [%s / %s - %s]:\n", arrivalRoute, arrival.StationPlaceID, directionName)
 						debugf("   Total Predictions: %d\n", stats.Total)
 						debugf("   Correct (<=3 min): %d\n", stats.Correct)
 						debugf("   Wrong (>3 min):   %d\n", stats.Incorrect)
@@ -883,8 +1133,8 @@ func main() {
 					}
 
 					if hasMiddlePrediction && middlePrediction.ArrivalTime != nil {
-						debugf("Most recent arrival diff saved [%s dir=%d]: %.2f min (middle snapshot at %s)\n",
-							arrival.StationPlaceID, arrival.Direction, middleDiffMinutes,
+						debugf("Most recent arrival diff saved [%s/%s dir=%d]: %.2f min (middle snapshot at %s)\n",
+							arrivalRoute, arrival.StationPlaceID, arrival.Direction, middleDiffMinutes,
 							middlePrediction.ObservationTime.Format(time.RFC3339))
 					}
 					statsMutex.Unlock()
@@ -896,15 +1146,18 @@ func main() {
 				// Cleanup: Remove evaluated predictions to prevent memory leak
 				predictionMutex.RUnlock()
 				predictionMutex.Lock()
-				delete(predictionDataMap[arrival.StationPlaceID][arrival.Direction], arrival.TrainID)
-				if len(predictionDataMap[arrival.StationPlaceID][arrival.Direction]) == 0 {
-					delete(predictionDataMap[arrival.StationPlaceID], arrival.Direction)
+				delete(predictionDataMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction], arrival.TrainID)
+				if len(predictionDataMap[arrivalRoute][arrival.StationPlaceID][arrival.Direction]) == 0 {
+					delete(predictionDataMap[arrivalRoute][arrival.StationPlaceID], arrival.Direction)
 				}
-				if len(predictionDataMap[arrival.StationPlaceID]) == 0 {
-					delete(predictionDataMap, arrival.StationPlaceID)
+				if len(predictionDataMap[arrivalRoute][arrival.StationPlaceID]) == 0 {
+					delete(predictionDataMap[arrivalRoute], arrival.StationPlaceID)
+				}
+				if len(predictionDataMap[arrivalRoute]) == 0 {
+					delete(predictionDataMap, arrivalRoute)
 				}
 				predictionMutex.Unlock()
-				debugf("Cleaned up predictions for vehicle %s at station %s\n", arrival.TrainID, arrival.StationPlaceID)
+				debugf("Cleaned up predictions for route %s vehicle %s at station %s\n", arrivalRoute, arrival.TrainID, arrival.StationPlaceID)
 			} else {
 				debugln("No predictions found for this train arrival")
 				predictionMutex.RUnlock()
@@ -920,70 +1173,151 @@ func main() {
 		defer ticker.Stop()
 		debugln("Started periodic prediction fetching (every 1 minutes)...")
 
-		// Map of actively polled platform stops to their parent stations
-		// Format: platformID -> parentStationID
-		// Keep a single active ID set per physical platform to avoid duplicate
-		// prediction ingestion when MBTA serves both legacy and current stop IDs.
-		platformToParent := map[string]string{
-			"70106": "place-lake", "70107": "place-lake", // Boston College
-			"70110": "place-sougr", "70111": "place-sougr", // South Street
-			"70112": "place-chill", "70113": "place-chill", // Chestnut Hill Avenue
-			"70114": "place-chswk", "70115": "place-chswk", // Chiswick Road
-			"70116": "place-sthld", "70117": "place-sthld", // Sutherland Road
-			"70120": "place-wascm", "70121": "place-wascm", // Washington Street
-			"70124": "place-wrnst", "70125": "place-wrnst", // Warren Street
-			"70126": "place-alsgr", "70127": "place-alsgr", // Allston Street
-			"70128": "place-grigg", "70129": "place-grigg", // Griggs Street
-			"70130": "place-harvd", "70131": "place-harvd", // Harvard Avenue
-			"70134": "place-brico", "70135": "place-brico", // Packards Corner
-			// Babcock/Amory use current MBTA IDs only; canonical station keys stay 70136/70140.
-			"170136": "70136", "170137": "70136", // Babcock Street
-			"170140": "70140", "170141": "70140", // Amory Street
-			"70144": "place-bucen", "70145": "place-bucen", // Boston University Central
-			"70146": "place-buest", "70147": "place-buest", // Boston University East
-			"70148": "place-bland", "70149": "place-bland", // Blandford Street
-			"70150": "place-kencl", "70151": "place-kencl", "71150": "place-kencl", "71151": "place-kencl", // Kenmore
-			"70152": "place-hymnl", "70153": "place-hymnl", // Hynes Convention Center
-			"70154": "place-coecl", "70155": "place-coecl", // Copley
-			"70156": "place-armnl", "70157": "place-armnl", // Arlington
-			"70158": "place-boyls", "70159": "place-boyls", // Boylston
-			"70196": "place-pktrm", "70197": "place-pktrm", "70198": "place-pktrm", "70199": "place-pktrm", "70200": "place-pktrm", "71199": "place-pktrm", // Park Street
-			"70201": "place-gover", "70202": "place-gover", // Government Center
+		platformToParentByRoute := map[string]map[string]string{
+			routeGreenB: {
+				"70106": "place-lake", "70107": "place-lake",
+				"70110": "place-sougr", "70111": "place-sougr",
+				"70112": "place-chill", "70113": "place-chill",
+				"70114": "place-chswk", "70115": "place-chswk",
+				"70116": "place-sthld", "70117": "place-sthld",
+				"70120": "place-wascm", "70121": "place-wascm",
+				"70124": "place-wrnst", "70125": "place-wrnst",
+				"70126": "place-alsgr", "70127": "place-alsgr",
+				"70128": "place-grigg", "70129": "place-grigg",
+				"70130": "place-harvd", "70131": "place-harvd",
+				"70134": "place-brico", "70135": "place-brico",
+				"170136": "place-babck", "170137": "place-babck",
+				"170140": "place-amory", "170141": "place-amory",
+				"70144": "place-bucen", "70145": "place-bucen",
+				"70146": "place-buest", "70147": "place-buest",
+				"70148": "place-bland", "70149": "place-bland",
+				"70150": "place-kencl", "70151": "place-kencl", "71150": "place-kencl", "71151": "place-kencl",
+				"70152": "place-hymnl", "70153": "place-hymnl",
+				"70154": "place-coecl", "70155": "place-coecl",
+				"70156": "place-armnl", "70157": "place-armnl",
+				"70158": "place-boyls", "70159": "place-boyls",
+				"70196": "place-pktrm", "70197": "place-pktrm", "70198": "place-pktrm", "70199": "place-pktrm", "70200": "place-pktrm", "71199": "place-pktrm",
+				"70201": "place-gover", "70202": "place-gover",
+			},
+			routeGreenC: {
+				"70211": "place-smary", "70212": "place-smary",
+				"70213": "place-hwsst", "70214": "place-hwsst",
+				"70215": "place-kntst", "70216": "place-kntst",
+				"70217": "place-stpul", "70218": "place-stpul",
+				"70219": "place-cool", "70220": "place-cool",
+				"70223": "place-sumav", "70224": "place-sumav",
+				"70225": "place-bndhl", "70226": "place-bndhl",
+				"70227": "place-fbkst", "70228": "place-fbkst",
+				"70229": "place-bcnwa", "70230": "place-bcnwa",
+				"70231": "place-tapst", "70232": "place-tapst",
+				"70233": "place-denrd", "70234": "place-denrd",
+				"70235": "place-engav", "70236": "place-engav",
+				"70237": "place-clmnl", "70238": "place-clmnl",
+				"70150": "place-kencl", "70151": "place-kencl", "71150": "place-kencl", "71151": "place-kencl",
+				"70152": "place-hymnl", "70153": "place-hymnl",
+				"70154": "place-coecl", "70155": "place-coecl",
+				"70156": "place-armnl", "70157": "place-armnl",
+				"70158": "place-boyls", "70159": "place-boyls",
+				"70196": "place-pktrm", "70197": "place-pktrm", "70198": "place-pktrm", "70199": "place-pktrm", "70200": "place-pktrm", "71199": "place-pktrm",
+				"70201": "place-gover", "70202": "place-gover",
+			},
+			routeGreenD: {
+				"70160": "place-river", "70161": "place-river",
+				"70162": "place-woodl", "70163": "place-woodl",
+				"70164": "place-waban", "70165": "place-waban",
+				"70166": "place-eliot", "70167": "place-eliot",
+				"70168": "place-newtn", "70169": "place-newtn",
+				"70170": "place-newto", "70171": "place-newto",
+				"70172": "place-chhil", "70173": "place-chhil",
+				"70174": "place-rsmnl", "70175": "place-rsmnl",
+				"70176": "place-bcnfd", "70177": "place-bcnfd",
+				"70178": "place-brkhl", "70179": "place-brkhl",
+				"70180": "place-bvmnl", "70181": "place-bvmnl",
+				"70182": "place-longw", "70183": "place-longw",
+				"70186": "place-fenwy", "70187": "place-fenwy",
+				"70150": "place-kencl", "70151": "place-kencl", "71150": "place-kencl", "71151": "place-kencl",
+				"70152": "place-hymnl", "70153": "place-hymnl",
+				"70154": "place-coecl", "70155": "place-coecl",
+				"70156": "place-armnl", "70157": "place-armnl",
+				"70158": "place-boyls", "70159": "place-boyls",
+				"70196": "place-pktrm", "70197": "place-pktrm", "70198": "place-pktrm", "70199": "place-pktrm", "70200": "place-pktrm", "71199": "place-pktrm",
+				"70201": "place-gover", "70202": "place-gover",
+				"70203": "place-haecl", "70204": "place-haecl",
+				"70205": "place-north", "70206": "place-north",
+				"70207": "place-spmnl", "70208": "place-spmnl",
+				"70209": "place-lech",  "70210": "place-lech",
+				// Union Square: use parent ID directly (GLX station, platform IDs resolved dynamically)
+				"place-unsqu": "place-unsqu",
+			},
+			routeGreenE: {
+				"70260": "place-hsmnl", "70261": "place-hsmnl",
+				"70257": "place-bckhl", "70258": "place-bckhl",
+				"70255": "place-rvrwy", "70256": "place-rvrwy",
+				"70253": "place-mispk", "70254": "place-mispk",
+				"70251": "place-fenwd", "70252": "place-fenwd",
+				"70249": "place-brmnl", "70250": "place-brmnl",
+				"70247": "place-lngmd", "70248": "place-lngmd",
+				"70245": "place-mfa", "70246": "place-mfa",
+				"70243": "place-nuniv", "70244": "place-nuniv",
+				"70241": "place-symcl", "70242": "place-symcl",
+				"70239": "place-prmnl", "70240": "place-prmnl",
+				"70150": "place-kencl", "70151": "place-kencl", "71150": "place-kencl", "71151": "place-kencl",
+				"70152": "place-hymnl", "70153": "place-hymnl",
+				"70154": "place-coecl", "70155": "place-coecl",
+				"70156": "place-armnl", "70157": "place-armnl",
+				"70158": "place-boyls", "70159": "place-boyls",
+				"70196": "place-pktrm", "70197": "place-pktrm", "70198": "place-pktrm", "70199": "place-pktrm", "70200": "place-pktrm", "71199": "place-pktrm",
+				"70201": "place-gover", "70202": "place-gover",
+				"70203": "place-haecl", "70204": "place-haecl",
+				"70205": "place-north", "70206": "place-north",
+				"70207": "place-spmnl", "70208": "place-spmnl",
+				"70209": "place-lech",  "70210": "place-lech",
+				// GLX stations: use parent IDs directly (platform IDs resolved dynamically)
+				"place-esomr": "place-esomr",
+				"place-gilmn": "place-gilmn",
+				"place-mgngl": "place-mgngl",
+				"place-balsq": "place-balsq",
+				"place-mdftf": "place-mdftf",
+			},
 		}
 
 		// Helper function to fetch predictions for a platform
-		fetchForPlatform := func(platformID, parentID string) {
+		fetchForPlatform := func(route, platformID, parentID string) {
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("Recovered from panic in fetchPrediction_single for platform %s: %v\n", platformID, r)
+					fmt.Printf("Recovered from panic in fetchPredictionSingle for route %s platform %s: %v\n", route, platformID, r)
 				}
 			}()
 
 			// Fetch both directions
-			if _, _, err := fetchPrediction_single(platformID, 0, parentID); err != nil {
+			if _, _, err := fetchPredictionSingle(route, platformID, 0, parentID); err != nil {
 				if err.Error() != "no predictions available" {
-					fmt.Printf("Error fetching prediction for platform %s direction 0: %v\n", platformID, err)
+					fmt.Printf("Error fetching prediction for route %s platform %s direction 0: %v\n", route, platformID, err)
 				}
 			}
-			if _, _, err := fetchPrediction_single(platformID, 1, parentID); err != nil {
+			if _, _, err := fetchPredictionSingle(route, platformID, 1, parentID); err != nil {
 				if err.Error() != "no predictions available" {
-					fmt.Printf("Error fetching prediction for platform %s direction 1: %v\n", platformID, err)
+					fmt.Printf("Error fetching prediction for route %s platform %s direction 1: %v\n", route, platformID, err)
 				}
 			}
 		}
 
 		// Fetch predictions immediately on startup
-		debugln("Fetching initial predictions for all platforms...")
-		for platformID, parentID := range platformToParent {
-			go fetchForPlatform(platformID, parentID)
+		debugln("Fetching initial predictions for all configured platforms...")
+		for route, platformToParent := range platformToParentByRoute {
+			for platformID, parentID := range platformToParent {
+				go fetchForPlatform(route, platformID, parentID)
+			}
 		}
 
 		// Then continue with periodic updates
 		for {
 			<-ticker.C
 			debugln("Fetching updated predictions...")
-			for platformID, parentID := range platformToParent {
-				go fetchForPlatform(platformID, parentID)
+			for route, platformToParent := range platformToParentByRoute {
+				for platformID, parentID := range platformToParent {
+					go fetchForPlatform(route, platformID, parentID)
+				}
 			}
 		}
 	}()

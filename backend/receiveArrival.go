@@ -24,6 +24,7 @@ var vehicleNextStop = make(map[string]string)
 
 // ArrivalInfo holds information about a train arrival
 type ArrivalInfo struct {
+	Route          string    // Route ID (e.g., "Green-B")
 	StationPlaceID string    // Station ID (e.g., "place-lake")
 	StationStopID  string    // Stop ID (e.g., "70106")
 	TrainID        string    // Vehicle/Train ID
@@ -43,12 +44,17 @@ var stopToParentStation = make(map[string]string)
 
 // Canonical aliases so MBTA alternate IDs map to the same Green-B station keys used by frontend/backend stats.
 var canonicalStationAliases = map[string]string{
-	"place-babck": "70136", // Babcock Street
-	"170136":      "70136", // Babcock Street inbound platform variant
-	"170137":      "70136", // Babcock Street outbound platform variant
-	"place-amory": "70140", // Amory Street
-	"170140":      "70140", // Amory Street inbound platform variant
-	"170141":      "70140", // Amory Street outbound platform variant
+	"70136":       "place-babck", // Babcock Street legacy platform key
+	"70137":       "place-babck", // Babcock Street legacy platform key
+	"170136":      "place-babck", // Babcock Street inbound platform variant
+	"170137":      "place-babck", // Babcock Street outbound platform variant
+	"70140":       "place-amory", // Amory Street legacy platform key
+	"70141":       "place-amory", // Amory Street legacy platform key
+	"170140":      "place-amory", // Amory Street inbound platform variant
+	"170141":      "place-amory", // Amory Street outbound platform variant
+	// Canonicalize Lechmere platform IDs to station parent ID so arrival/prediction keys match.
+	"70209": "place-lech", // Lechmere platform variant
+	"70210": "place-lech", // Lechmere platform variant
 }
 
 func normalizeStationKey(id string) string {
@@ -172,6 +178,8 @@ var stationGeoLocation = map[string][2]float64{
 	"70237": {42.336216, -71.149201}, // Cleveland Circle - Exit Only
 	"70238": {42.336252, -71.148774}, // Cleveland Circle
 	// Green Line E - Heath Street Branch
+	"70260": {42.328218, -71.109776}, // Heath Street
+	"70261": {42.328218, -71.109776}, // Heath Street
 	"70239": {42.345570, -71.081696}, // Prudential
 	"70240": {42.345570, -71.081696}, // Prudential
 	"70241": {42.342687, -71.085056}, // Symphony
@@ -222,12 +230,10 @@ var staticStopToParentStation = map[string]string{
 	"70131": "place-harvd", // Harvard Avenue
 	"70134": "place-brico", // Packards Corner
 	"70135": "place-brico", // Packards Corner
-	// Note: Stops 70136-70143 have no parent station in MBTA API.
-	// Canonicalize each orphan pair to a single station key so both directions aggregate together.
-	"70136": "70136",       // Babcock Street
-	"70137": "70136",       // Babcock Street
-	"70140": "70140",       // Amory Street (legacy IDs)
-	"70141": "70140",       // Amory Street (legacy IDs)
+	"70136": "place-babck", // Babcock Street
+	"70137": "place-babck", // Babcock Street
+	"70140": "place-amory", // Amory Street
+	"70141": "place-amory", // Amory Street
 	"70144": "place-bucen", // Boston University Central
 	"70145": "place-bucen", // Boston University Central
 	"70146": "place-buest", // Boston University East
@@ -283,8 +289,8 @@ var staticStopToParentStation = map[string]string{
 	"70206": "place-north", // North Station
 	"70207": "place-spmnl", // Science Park/West End
 	"70208": "place-spmnl", // Science Park/West End
-	"70209": "70209",       // Lechmere - Exit Only (no parent in API)
-	"70210": "70210",       // Lechmere (no parent in API)
+	"70209": "place-lech",  // Lechmere - Exit Only
+	"70210": "place-lech",  // Lechmere
 	"70211": "place-smary", // Saint Marys Street
 	"70212": "place-smary", // Saint Marys Street
 	"70213": "place-hwsst", // Hawes Street
@@ -311,6 +317,8 @@ var staticStopToParentStation = map[string]string{
 	"70236": "place-engav", // Englewood Avenue
 	"70237": "place-clmnl", // Cleveland Circle - Exit Only
 	"70238": "place-clmnl", // Cleveland Circle
+	"70260": "place-hsmnl", // Heath Street
+	"70261": "place-hsmnl", // Heath Street
 	"70239": "place-prmnl", // Prudential
 	"70240": "place-prmnl", // Prudential
 	"70241": "place-symcl", // Symphony
@@ -382,6 +390,7 @@ var parentStationIDs = []string{
 	"place-north", // North Station
 	"place-nuniv", // Northeastern University
 	"place-pktrm", // Park Street
+	"place-hsmnl", // Heath Street
 	"place-prmnl", // Prudential
 	"place-river", // Riverside
 	"place-rsmnl", // Reservoir
@@ -398,12 +407,9 @@ var parentStationIDs = []string{
 	"place-wascm", // Washington Street
 	"place-woodl", // Woodland
 	"place-wrnst", // Warren Street
-	"70209",
-	"70210",
-	"70136",
-	"70137",
-	"70140",
-	"70141",
+	"place-lech",
+	"place-babck",
+	"place-amory",
 }
 
 // NEED TO START FROM HERE =======================================
@@ -411,7 +417,7 @@ var parentStationIDs = []string{
 // mutex for protecting shared maps from race conditions
 var mapMutex sync.RWMutex
 
-// Note: 'key' variable is declared and initialized in receiveAPIcall.go
+// Note: route API keys are loaded in receiveAPIcall.go
 
 type ActualData struct {
 	VehicleID       string
@@ -519,7 +525,7 @@ func haversineDistance(lat1, lon1, lat2, lon2 float64) float64 {
 }
 
 // fetchStopGeolocation fetches stop coordinates from MBTA API if not already cached
-func fetchStopGeolocation(stopID string, client *http.Client) ([2]float64, error) {
+func fetchStopGeolocation(stopID, routeName string, client *http.Client) ([2]float64, error) {
 	mapMutex.RLock()
 	if coords, exists := stationGeoLocation[stopID]; exists {
 		mapMutex.RUnlock()
@@ -536,7 +542,11 @@ func fetchStopGeolocation(stopID string, client *http.Client) ([2]float64, error
 	if err != nil {
 		return [2]float64{}, err
 	}
-	req.Header.Set("x-api-key", key)
+	apiKey, err := apiKeyForRoute(routeName)
+	if err != nil {
+		return [2]float64{}, err
+	}
+	req.Header.Set("x-api-key", apiKey)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -578,6 +588,11 @@ func actualArrivalMoment(routeName string) {
 	defer ticker.Stop()
 	// Create HTTP client once with timeout to prevent hanging
 	client := &http.Client{Timeout: 10 * time.Second}
+	apiKey, err := apiKeyForRoute(routeName)
+	if err != nil {
+		fmt.Printf("Error: no API key configured for route %s: %v\n", routeName, err)
+		return
+	}
 	// call once right away
 	for {
 		// 1. Fetch data from the MBTA API the line.
@@ -589,7 +604,7 @@ func actualArrivalMoment(routeName string) {
 			continue
 		}
 		// Set the API key in the header.
-		req.Header.Set("x-api-key", key)
+		req.Header.Set("x-api-key", apiKey)
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("Error fetching vehicles: %v\n", err)
@@ -689,11 +704,11 @@ func actualArrivalMoment(routeName string) {
 		if len(staleVehicles) > 0 {
 			predictionMutex.Lock()
 			for _, vehicleID := range staleVehicles {
-				for stopID := range predictionDataMap {
-					for direction := range predictionDataMap[stopID] {
-						if _, exists := predictionDataMap[stopID][direction][vehicleID]; exists {
-							delete(predictionDataMap[stopID][direction], vehicleID)
-							debugf("Cleaned up predictions for stale vehicle %s at stop %s direction %d\n", vehicleID, stopID, direction)
+				for stopID := range predictionDataMap[routeName] {
+					for direction := range predictionDataMap[routeName][stopID] {
+						if _, exists := predictionDataMap[routeName][stopID][direction][vehicleID]; exists {
+							delete(predictionDataMap[routeName][stopID][direction], vehicleID)
+							debugf("Cleaned up predictions for stale route %s vehicle %s at stop %s direction %d\n", routeName, vehicleID, stopID, direction)
 						}
 					}
 				}
@@ -724,7 +739,7 @@ func actualArrivalMoment(routeName string) {
 			// If vehicle has an existing next stop, check if it's still within 40m
 			withinRadius := false
 			if hasExistingNextStop {
-				nextStopCoords, err := fetchStopGeolocation(existingNextStop, client)
+				nextStopCoords, err := fetchStopGeolocation(existingNextStop, routeName, client)
 				if err == nil {
 					distance := haversineDistance(
 						vehicle.Attributes.Latitude, vehicle.Attributes.Longitude,
@@ -770,7 +785,7 @@ func actualArrivalMoment(routeName string) {
 							fmt.Printf("Error creating prediction request for vehicle %s: %v\n", vehicle.ID, err)
 							continue
 						}
-						predReq.Header.Set("x-api-key", key)
+						predReq.Header.Set("x-api-key", apiKey)
 
 						predResp, err := client.Do(predReq)
 						if err != nil {
@@ -897,6 +912,7 @@ func actualArrivalMoment(routeName string) {
 					placeID = normalizeStationKey(placeID)
 
 					arrivalInfo = ArrivalInfo{
+						Route:          routeName,
 						StationPlaceID: placeID,
 						StationStopID:  actualData.RelatedStop,
 						TrainID:        vehicleID,
@@ -946,7 +962,7 @@ func actualArrivalMoment(routeName string) {
 			}
 
 			// Fetch stop coordinates (from cache or API)
-			nextStopCoords, err := fetchStopGeolocation(nextStopID, client)
+			nextStopCoords, err := fetchStopGeolocation(nextStopID, routeName, client)
 			if err != nil {
 				fmt.Printf("Warning: Could not fetch geolocation for stop %s: %v\n", nextStopID, err)
 				continue
@@ -988,6 +1004,7 @@ func actualArrivalMoment(routeName string) {
 					placeID = normalizeStationKey(placeID)
 
 					arrivalInfo = ArrivalInfo{
+						Route:          routeName,
 						StationPlaceID: placeID,
 						StationStopID:  nextStopID,
 						TrainID:        vehicleID,
