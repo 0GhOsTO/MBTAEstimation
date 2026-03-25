@@ -89,7 +89,7 @@
 
 .equation-box {
   max-width: 720px;
-  margin: 1rem auto 1.8rem auto;
+  margin: 0 auto 1.8rem auto;
   padding: 1.2rem 1.5rem;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -748,6 +748,11 @@
     gap: 0.5rem;
   }
 
+  .selector-separator {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
   .line-selector {
     width: auto;
     flex: 0 0 110px;
@@ -841,12 +846,19 @@
 /* Station and Line Selector Dropdown */
 .selector-container {
   margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 2rem;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.selector-separator {
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  opacity: 0.7;
 }
 
 .line-selector {
@@ -956,7 +968,7 @@
 
   .equation-box {
     padding: 0.5rem;
-    margin: 1rem 0.25rem 1rem 0.25rem;
+    margin: 0.25rem 1rem 0.25rem 1rem;
   }
 
   .equation-line .katex {
@@ -971,7 +983,7 @@
     flex-direction: row;
     align-items: flex-start;
     gap: 1rem;
-    padding: 0 0.5rem;
+    padding: 0 0rem;
   }
 
   .percentage-circle {
