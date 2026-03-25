@@ -416,34 +416,29 @@ function App() {
       <div className="left-panel">
         <div className="trustworthiness-display">
           <h1 className="project-title">MBTA Reliability</h1>
+          <div className="selector-container">
+            <select 
+              className="line-selector" 
+              value={selectedLine} 
+              onChange={(e) => handleLineChange(e.target.value)}
+            >
+              {supportedLines.map((line) => (
+                <option key={line} value={line}>{line.replace('-', ' ')}</option>
+              ))}
+            </select>
+            <select 
+              className="station-selector" 
+              value={selectedStation} 
+              onChange={(e) => handleStationSelect(e.target.value)}
+            >
+              {currentStations.map((station) => (
+                <option key={station.name} value={station.name}>
+                  {station.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <h2 className="station-name">{selectedStation}</h2>
-          <button 
-            className="equation-toggle-btn"
-            onClick={() => setShowEquation(!showEquation)}
-          >
-            <span>{showEquation ? '▼' : '▶'}</span>
-            <span>What does the % mean?</span>
-          </button>
-          {showEquation && (
-            <div className="equation-box">
-              <div className="reliability-explanation">
-                <div className="reliability-levels">
-                  <div className="reliability-level level-poor">
-                    <span className="level-range">~50%</span>
-                    <span className="level-label">Train often delayed</span>
-                  </div>
-                  <div className="reliability-level level-moderate">
-                    <span className="level-range">50-70%</span>
-                    <span className="level-label">Train sometimes delayed</span>
-                  </div>
-                  <div className="reliability-level level-good">
-                    <span className="level-range">70%+</span>
-                    <span className="level-label">Train usually on time</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
           <div className="metrics-and-stations">
             <div className="accuracy-circles-container">
               <div className="accuracy-item">
@@ -481,35 +476,40 @@ function App() {
               </div>
             </div>
           </div>
-          <div className="station-selector-container">
-            <select 
-              className="station-selector" 
-              value={selectedStation} 
-              onChange={(e) => handleStationSelect(e.target.value)}
-            >
-              {currentStations.map((station) => (
-                <option key={station.name} value={station.name}>
-                  {station.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <button 
+            className="equation-toggle-btn"
+            onClick={() => setShowEquation(!showEquation)}
+          >
+            <span>{showEquation ? '▼' : '▶'}</span>
+            <span>What does the % mean?</span>
+          </button>
+          {showEquation && (
+            <div className="equation-box">
+              <div className="reliability-explanation">
+                <div className="reliability-levels">
+                  <div className="reliability-level level-poor">
+                    <span className="level-range">~50%</span>
+                    <span className="level-label">Train often delayed</span>
+                  </div>
+                  <div className="reliability-level level-moderate">
+                    <span className="level-range">50-70%</span>
+                    <span className="level-label">Train sometimes delayed</span>
+                  </div>
+                  <div className="reliability-level level-good">
+                    <span className="level-range">70%+</span>
+                    <span className="level-label">Train usually on time</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
       <div className="right-panel">
         <div className="map-container">
           <div className="map-header">
-            <h2>Green Line</h2>
-            <select 
-              className="line-selector" 
-              value={selectedLine} 
-              onChange={(e) => handleLineChange(e.target.value)}
-            >
-              {supportedLines.map((line) => (
-                <option key={line} value={line}>{line.replace('-', ' Line ')}</option>
-              ))}
-            </select>
+            <h2>Station Map</h2>
           </div>
           <div className="leaflet-map-container">
             <MapContainer
