@@ -350,6 +350,11 @@ func fetchPredictionSingle(route, stopID string, direction int, parentStationID 
 				data.DepartureTime = &departureTime
 			}
 		}
+		// Terminals often publish departure_time but omit arrival_time.
+		// Use departure as a fallback event time so those predictions are still graded.
+		if data.ArrivalTime == nil && data.DepartureTime != nil {
+			data.ArrivalTime = data.DepartureTime
+		}
 
 		// Set status if present
 		if pred.Attributes.Status != nil {
@@ -1253,9 +1258,8 @@ func main() {
 				"70203": "place-haecl", "70204": "place-haecl",
 				"70205": "place-north", "70206": "place-north",
 				"70207": "place-spmnl", "70208": "place-spmnl",
-				"70209": "place-lech", "70210": "place-lech",
-				// Union Square: use parent ID directly (GLX station, platform IDs resolved dynamically)
-				"place-unsqu": "place-unsqu",
+				"70501": "place-lech", "70502": "place-lech",
+				"70503": "place-unsqu", "70504": "place-unsqu",
 			},
 			routeGreenE: {
 				"70260": "place-hsmnl", "70261": "place-hsmnl",
@@ -1279,13 +1283,12 @@ func main() {
 				"70203": "place-haecl", "70204": "place-haecl",
 				"70205": "place-north", "70206": "place-north",
 				"70207": "place-spmnl", "70208": "place-spmnl",
-				"70209": "place-lech", "70210": "place-lech",
-				// GLX stations: use parent IDs directly (platform IDs resolved dynamically)
-				"place-esomr": "place-esomr",
-				"place-gilmn": "place-gilmn",
-				"place-mgngl": "place-mgngl",
-				"place-balsq": "place-balsq",
-				"place-mdftf": "place-mdftf",
+				"70501": "place-lech", "70502": "place-lech",
+				"70513": "place-esomr", "70514": "place-esomr",
+				"70505": "place-gilmn", "70506": "place-gilmn",
+				"70507": "place-mgngl", "70508": "place-mgngl",
+				"70509": "place-balsq", "70510": "place-balsq",
+				"70511": "place-mdftf", "70512": "place-mdftf",
 			},
 		}
 

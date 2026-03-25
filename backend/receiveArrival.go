@@ -53,8 +53,22 @@ var canonicalStationAliases = map[string]string{
 	"170140": "place-amory", // Amory Street inbound platform variant
 	"170141": "place-amory", // Amory Street outbound platform variant
 	// Canonicalize Lechmere platform IDs to station parent ID so arrival/prediction keys match.
-	"70209": "place-lech", // Lechmere platform variant
-	"70210": "place-lech", // Lechmere platform variant
+	"70209": "place-lech",  // Lechmere platform variant
+	"70210": "place-lech",  // Lechmere platform variant
+	"70501": "place-lech",  // Lechmere GLX platform
+	"70502": "place-lech",  // Lechmere GLX platform
+	"70503": "place-unsqu", // Union Square GLX platform
+	"70504": "place-unsqu", // Union Square GLX platform
+	"70505": "place-gilmn", // Gilman Square GLX platform
+	"70506": "place-gilmn", // Gilman Square GLX platform
+	"70507": "place-mgngl", // Magoun Square GLX platform
+	"70508": "place-mgngl", // Magoun Square GLX platform
+	"70509": "place-balsq", // Ball Square GLX platform
+	"70510": "place-balsq", // Ball Square GLX platform
+	"70511": "place-mdftf", // Medford/Tufts GLX platform
+	"70512": "place-mdftf", // Medford/Tufts GLX platform
+	"70513": "place-esomr", // East Somerville GLX platform
+	"70514": "place-esomr", // East Somerville GLX platform
 }
 
 func normalizeStationKey(id string) string {
@@ -85,44 +99,52 @@ func routeArrivalPrefix(routeName, vehicleID string) string {
 
 var stationGeoLocation = map[string][2]float64{
 	// Green Line B - Boston College Branch
-	"70106": {42.340149, -71.167029}, // Boston College
-	"70107": {42.340240, -71.166849}, // Boston College - Exit Only
-	"70110": {42.339371, -71.157057}, // South Street
-	"70111": {42.339581, -71.157499}, // South Street
-	"70112": {42.338730, -71.152526}, // Chestnut Hill Avenue
-	"70113": {42.338290, -71.153025}, // Chestnut Hill Avenue
-	"70114": {42.340808, -71.150633}, // Chiswick Road
-	"70115": {42.340540, -71.151140}, // Chiswick Road
-	"70116": {42.341589, -71.146089}, // Sutherland Road
-	"70117": {42.341577, -71.146607}, // Sutherland Road
-	"70120": {42.344329, -71.142385}, // Washington Street
-	"70121": {42.343974, -71.142731}, // Washington Street
-	"70124": {42.348285, -71.140436}, // Warren Street
-	"70125": {42.348819, -71.140051}, // Warren Street
-	"70126": {42.348649, -71.137881}, // Allston Street
-	"70127": {42.349251, -71.137398}, // Allston Street
-	"70128": {42.348747, -71.134500}, // Griggs Street
-	"70129": {42.348919, -71.134305}, // Griggs Street
-	"70130": {42.350263, -71.131298}, // Harvard Avenue
-	"70131": {42.350602, -71.130727}, // Harvard Avenue
-	"70134": {42.351891, -71.125067}, // Packard's Corner
-	"70135": {42.352136, -71.125126}, // Packard's Corner
-	"70144": {42.350013, -71.106902}, // Boston University Central
-	"70145": {42.349293, -71.106865}, // Boston University Central
-	"70146": {42.349659, -71.103989}, // Boston University East
-	"70147": {42.349148, -71.103767}, // Boston University East
-	"70148": {42.348881, -71.100258}, // Blandford Street
-	"70149": {42.349293, -71.100258}, // Blandford Street
-	"70150": {42.348949, -71.095169}, // Kenmore
-	"70151": {42.348949, -71.095169}, // Kenmore (C/D)
-	"70152": {42.347888, -71.087903}, // Hynes Convention Center
-	"70153": {42.347888, -71.087903}, // Hynes Convention Center
-	"70154": {42.349871, -71.078049}, // Copley
-	"70155": {42.350126, -71.077376}, // Copley
-	"70156": {42.351635, -71.070694}, // Arlington
-	"70157": {42.351902, -71.070893}, // Arlington
-	"70158": {42.352816, -71.064262}, // Boylston
-	"70159": {42.353214, -71.064545}, // Boylston
+	"70106":  {42.340149, -71.167029}, // Boston College
+	"70107":  {42.340240, -71.166849}, // Boston College - Exit Only
+	"70110":  {42.339371, -71.157057}, // South Street
+	"70111":  {42.339581, -71.157499}, // South Street
+	"70112":  {42.338730, -71.152526}, // Chestnut Hill Avenue
+	"70113":  {42.338290, -71.153025}, // Chestnut Hill Avenue
+	"70114":  {42.340808, -71.150633}, // Chiswick Road
+	"70115":  {42.340540, -71.151140}, // Chiswick Road
+	"70116":  {42.341589, -71.146089}, // Sutherland Road
+	"70117":  {42.341577, -71.146607}, // Sutherland Road
+	"70120":  {42.344329, -71.142385}, // Washington Street
+	"70121":  {42.343974, -71.142731}, // Washington Street
+	"70124":  {42.348285, -71.140436}, // Warren Street
+	"70125":  {42.348819, -71.140051}, // Warren Street
+	"70126":  {42.348649, -71.137881}, // Allston Street
+	"70127":  {42.349251, -71.137398}, // Allston Street
+	"70128":  {42.348747, -71.134500}, // Griggs Street
+	"70129":  {42.348919, -71.134305}, // Griggs Street
+	"70130":  {42.350263, -71.131298}, // Harvard Avenue
+	"70131":  {42.350602, -71.130727}, // Harvard Avenue
+	"70134":  {42.351891, -71.125067}, // Packard's Corner
+	"70135":  {42.352136, -71.125126}, // Packard's Corner
+	"70136":  {42.351538, -71.119553}, // Babcock Street (legacy)
+	"70137":  {42.351695, -71.120257}, // Babcock Street (legacy)
+	"170136": {42.351538, -71.119553}, // Babcock Street
+	"170137": {42.351695, -71.120257}, // Babcock Street
+	"70140":  {42.350901, -71.114318}, // Amory Street (legacy)
+	"70141":  {42.351066, -71.115027}, // Amory Street (legacy)
+	"170140": {42.350901, -71.114318}, // Amory Street
+	"170141": {42.351066, -71.115027}, // Amory Street
+	"70144":  {42.350013, -71.106902}, // Boston University Central
+	"70145":  {42.349293, -71.106865}, // Boston University Central
+	"70146":  {42.349659, -71.103989}, // Boston University East
+	"70147":  {42.349148, -71.103767}, // Boston University East
+	"70148":  {42.348881, -71.100258}, // Blandford Street
+	"70149":  {42.349293, -71.100258}, // Blandford Street
+	"70150":  {42.348949, -71.095169}, // Kenmore
+	"70151":  {42.348949, -71.095169}, // Kenmore (C/D)
+	"70152":  {42.347888, -71.087903}, // Hynes Convention Center
+	"70153":  {42.347888, -71.087903}, // Hynes Convention Center
+	"70154":  {42.349871, -71.078049}, // Copley
+	"70155":  {42.350126, -71.077376}, // Copley
+	"70156":  {42.351635, -71.070694}, // Arlington
+	"70157":  {42.351902, -71.070893}, // Arlington
+	"70158":  {42.352816, -71.064262}, // Boylston
+	"70159":  {42.353214, -71.064545}, // Boylston
 	// Green Line D - Riverside Branch
 	"70160": {42.337317, -71.252256}, // Riverside
 	"70161": {42.337348, -71.252236}, // Riverside
@@ -166,6 +188,21 @@ var stationGeoLocation = map[string][2]float64{
 	"70206": {42.365280, -71.060205}, // North Station
 	"70207": {42.366664, -71.067666}, // Science Park/West End
 	"70208": {42.366664, -71.067666}, // Science Park/West End
+	// Green Line GLX extension platforms
+	"70501": {42.371566, -71.076457}, // Lechmere
+	"70502": {42.370989, -71.075860}, // Lechmere
+	"70503": {42.377024, -71.093964}, // Union Square
+	"70504": {42.376990, -71.093993}, // Union Square
+	"70505": {42.388043, -71.096956}, // Gilman Square
+	"70506": {42.387831, -71.096629}, // Gilman Square
+	"70507": {42.394357, -71.106824}, // Magoun Square
+	"70508": {42.394050, -71.106688}, // Magoun Square
+	"70509": {42.400380, -71.111331}, // Ball Square
+	"70510": {42.400103, -71.111207}, // Ball Square
+	"70511": {42.408306, -71.117280}, // Medford/Tufts
+	"70512": {42.408280, -71.117339}, // Medford/Tufts
+	"70513": {42.379881, -71.087032}, // East Somerville
+	"70514": {42.379624, -71.086829}, // East Somerville
 	// Green Line C - Cleveland Circle Branch
 	"70211": {42.345884, -71.107697}, // Saint Mary's Street
 	"70212": {42.346007, -71.107166}, // Saint Mary's Street
@@ -224,140 +261,158 @@ var stationGeoLocation = map[string][2]float64{
 // Static mapping of platform IDs to parent station (place) IDs for Green Line
 var staticStopToParentStation = map[string]string{
 	// Green Line B - Boston College
-	"70106": "place-lake",  // Boston College
-	"70107": "place-lake",  // Boston College - Exit Only
-	"70110": "place-sougr", // South Street
-	"70111": "place-sougr", // South Street
-	"70112": "place-chill", // Chestnut Hill Avenue
-	"70113": "place-chill", // Chestnut Hill Avenue
-	"70114": "place-chswk", // Chiswick Road
-	"70115": "place-chswk", // Chiswick Road
-	"70116": "place-sthld", // Sutherland Road
-	"70117": "place-sthld", // Sutherland Road
-	"70120": "place-wascm", // Washington Street
-	"70121": "place-wascm", // Washington Street
-	"70124": "place-wrnst", // Warren Street
-	"70125": "place-wrnst", // Warren Street
-	"70126": "place-alsgr", // Allston Street
-	"70127": "place-alsgr", // Allston Street
-	"70128": "place-grigg", // Griggs Street
-	"70129": "place-grigg", // Griggs Street
-	"70130": "place-harvd", // Harvard Avenue
-	"70131": "place-harvd", // Harvard Avenue
-	"70134": "place-brico", // Packards Corner
-	"70135": "place-brico", // Packards Corner
-	"70136": "place-babck", // Babcock Street
-	"70137": "place-babck", // Babcock Street
-	"70140": "place-amory", // Amory Street
-	"70141": "place-amory", // Amory Street
-	"70144": "place-bucen", // Boston University Central
-	"70145": "place-bucen", // Boston University Central
-	"70146": "place-buest", // Boston University East
-	"70147": "place-buest", // Boston University East
-	"70148": "place-bland", // Blandford Street
-	"70149": "place-bland", // Blandford Street
-	"70150": "place-kencl", // Kenmore
-	"70151": "place-kencl", // Kenmore (C/D)
-	"70152": "place-hymnl", // Hynes Convention Center
-	"70153": "place-hymnl", // Hynes Convention Center
-	"70154": "place-coecl", // Copley
-	"70155": "place-coecl", // Copley
-	"70156": "place-armnl", // Arlington
-	"70157": "place-armnl", // Arlington
-	"70158": "place-boyls", // Boylston
-	"70159": "place-boyls", // Boylston
-	"70160": "place-river", // Riverside
-	"70161": "place-river", // Riverside - Exit Only
-	"70162": "place-woodl", // Woodland
-	"70163": "place-woodl", // Woodland
-	"70164": "place-waban", // Waban
-	"70165": "place-waban", // Waban
-	"70166": "place-eliot", // Eliot
-	"70167": "place-eliot", // Eliot
-	"70168": "place-newtn", // Newton Highlands
-	"70169": "place-newtn", // Newton Highlands
-	"70170": "place-newto", // Newton Centre
-	"70171": "place-newto", // Newton Centre
-	"70172": "place-chhil", // Chestnut Hill (D)
-	"70173": "place-chhil", // Chestnut Hill (D)
-	"70174": "place-rsmnl", // Reservoir
-	"70175": "place-rsmnl", // Reservoir
-	"70176": "place-bcnfd", // Beaconsfield
-	"70177": "place-bcnfd", // Beaconsfield
-	"70178": "place-brkhl", // Brookline Hills
-	"70179": "place-brkhl", // Brookline Hills
-	"70180": "place-bvmnl", // Brookline Village
-	"70181": "place-bvmnl", // Brookline Village
-	"70182": "place-longw", // Longwood (D)
-	"70183": "place-longw", // Longwood (D)
-	"70186": "place-fenwy", // Fenway
-	"70187": "place-fenwy", // Fenway
-	"70196": "place-pktrm", // Park Street (B)
-	"70197": "place-pktrm", // Park Street (C)
-	"70198": "place-pktrm", // Park Street (D)
-	"70199": "place-pktrm", // Park Street (E)
-	"70200": "place-pktrm", // Park Street
-	"70201": "place-gover", // Government Center
-	"70202": "place-gover", // Government Center
-	"70203": "place-haecl", // Haymarket
-	"70204": "place-haecl", // Haymarket
-	"70205": "place-north", // North Station
-	"70206": "place-north", // North Station
-	"70207": "place-spmnl", // Science Park/West End
-	"70208": "place-spmnl", // Science Park/West End
-	"70209": "place-lech",  // Lechmere - Exit Only
-	"70210": "place-lech",  // Lechmere
-	"70211": "place-smary", // Saint Marys Street
-	"70212": "place-smary", // Saint Marys Street
-	"70213": "place-hwsst", // Hawes Street
-	"70214": "place-hwsst", // Hawes Street
-	"70215": "place-kntst", // Kent Street
-	"70216": "place-kntst", // Kent Street
-	"70217": "place-stpul", // Saint Paul Street (C)
-	"70218": "place-stpul", // Saint Paul Street (C)
-	"70219": "place-cool",  // Coolidge Corner
-	"70220": "place-cool",  // Coolidge Corner
-	"70223": "place-sumav", // Summit Avenue
-	"70224": "place-sumav", // Summit Avenue
-	"70225": "place-bndhl", // Brandon Hall
-	"70226": "place-bndhl", // Brandon Hall
-	"70227": "place-fbkst", // Fairbanks Street
-	"70228": "place-fbkst", // Fairbanks Street
-	"70229": "place-bcnwa", // Washington Square
-	"70230": "place-bcnwa", // Washington Square
-	"70231": "place-tapst", // Tappan Street
-	"70232": "place-tapst", // Tappan Street
-	"70233": "place-denrd", // Dean Road
-	"70234": "place-denrd", // Dean Road
-	"70235": "place-engav", // Englewood Avenue
-	"70236": "place-engav", // Englewood Avenue
-	"70237": "place-clmnl", // Cleveland Circle - Exit Only
-	"70238": "place-clmnl", // Cleveland Circle
-	"70260": "place-hsmnl", // Heath Street
-	"70261": "place-hsmnl", // Heath Street
-	"70239": "place-prmnl", // Prudential
-	"70240": "place-prmnl", // Prudential
-	"70241": "place-symcl", // Symphony
-	"70242": "place-symcl", // Symphony
-	"70243": "place-nuniv", // Northeastern University
-	"70244": "place-nuniv", // Northeastern University
-	"70245": "place-mfa",   // Museum of Fine Arts
-	"70246": "place-mfa",   // Museum of Fine Arts
-	"70247": "place-lngmd", // Longwood Medical Area
-	"70248": "place-lngmd", // Longwood Medical Area
-	"70249": "place-brmnl", // Brigham Circle
-	"70250": "place-brmnl", // Brigham Circle
-	"70251": "place-fenwd", // Fenwood Road
-	"70252": "place-fenwd", // Fenwood Road
-	"70253": "place-mispk", // Mission Park
-	"70254": "place-mispk", // Mission Park
-	"70255": "place-rvrwy", // Riverway
-	"70256": "place-rvrwy", // Riverway
-	"70257": "place-bckhl", // Back of the Hill
-	"70258": "place-bckhl", // Back of the Hill
-	"71150": "place-kencl", // Kenmore
-	"71151": "place-kencl", // Kenmore
-	"71199": "place-pktrm", // Park Street - Drop-off Only
+	"70106":  "place-lake",  // Boston College
+	"70107":  "place-lake",  // Boston College - Exit Only
+	"70110":  "place-sougr", // South Street
+	"70111":  "place-sougr", // South Street
+	"70112":  "place-chill", // Chestnut Hill Avenue
+	"70113":  "place-chill", // Chestnut Hill Avenue
+	"70114":  "place-chswk", // Chiswick Road
+	"70115":  "place-chswk", // Chiswick Road
+	"70116":  "place-sthld", // Sutherland Road
+	"70117":  "place-sthld", // Sutherland Road
+	"70120":  "place-wascm", // Washington Street
+	"70121":  "place-wascm", // Washington Street
+	"70124":  "place-wrnst", // Warren Street
+	"70125":  "place-wrnst", // Warren Street
+	"70126":  "place-alsgr", // Allston Street
+	"70127":  "place-alsgr", // Allston Street
+	"70128":  "place-grigg", // Griggs Street
+	"70129":  "place-grigg", // Griggs Street
+	"70130":  "place-harvd", // Harvard Avenue
+	"70131":  "place-harvd", // Harvard Avenue
+	"70134":  "place-brico", // Packards Corner
+	"70135":  "place-brico", // Packards Corner
+	"70136":  "place-babck", // Babcock Street
+	"70137":  "place-babck", // Babcock Street
+	"170136": "place-babck", // Babcock Street (platform variant)
+	"170137": "place-babck", // Babcock Street (platform variant)
+	"70140":  "place-amory", // Amory Street
+	"70141":  "place-amory", // Amory Street
+	"170140": "place-amory", // Amory Street (platform variant)
+	"170141": "place-amory", // Amory Street (platform variant)
+	"70144":  "place-bucen", // Boston University Central
+	"70145":  "place-bucen", // Boston University Central
+	"70146":  "place-buest", // Boston University East
+	"70147":  "place-buest", // Boston University East
+	"70148":  "place-bland", // Blandford Street
+	"70149":  "place-bland", // Blandford Street
+	"70150":  "place-kencl", // Kenmore
+	"70151":  "place-kencl", // Kenmore (C/D)
+	"70152":  "place-hymnl", // Hynes Convention Center
+	"70153":  "place-hymnl", // Hynes Convention Center
+	"70154":  "place-coecl", // Copley
+	"70155":  "place-coecl", // Copley
+	"70156":  "place-armnl", // Arlington
+	"70157":  "place-armnl", // Arlington
+	"70158":  "place-boyls", // Boylston
+	"70159":  "place-boyls", // Boylston
+	"70160":  "place-river", // Riverside
+	"70161":  "place-river", // Riverside - Exit Only
+	"70162":  "place-woodl", // Woodland
+	"70163":  "place-woodl", // Woodland
+	"70164":  "place-waban", // Waban
+	"70165":  "place-waban", // Waban
+	"70166":  "place-eliot", // Eliot
+	"70167":  "place-eliot", // Eliot
+	"70168":  "place-newtn", // Newton Highlands
+	"70169":  "place-newtn", // Newton Highlands
+	"70170":  "place-newto", // Newton Centre
+	"70171":  "place-newto", // Newton Centre
+	"70172":  "place-chhil", // Chestnut Hill (D)
+	"70173":  "place-chhil", // Chestnut Hill (D)
+	"70174":  "place-rsmnl", // Reservoir
+	"70175":  "place-rsmnl", // Reservoir
+	"70176":  "place-bcnfd", // Beaconsfield
+	"70177":  "place-bcnfd", // Beaconsfield
+	"70178":  "place-brkhl", // Brookline Hills
+	"70179":  "place-brkhl", // Brookline Hills
+	"70180":  "place-bvmnl", // Brookline Village
+	"70181":  "place-bvmnl", // Brookline Village
+	"70182":  "place-longw", // Longwood (D)
+	"70183":  "place-longw", // Longwood (D)
+	"70186":  "place-fenwy", // Fenway
+	"70187":  "place-fenwy", // Fenway
+	"70196":  "place-pktrm", // Park Street (B)
+	"70197":  "place-pktrm", // Park Street (C)
+	"70198":  "place-pktrm", // Park Street (D)
+	"70199":  "place-pktrm", // Park Street (E)
+	"70200":  "place-pktrm", // Park Street
+	"70201":  "place-gover", // Government Center
+	"70202":  "place-gover", // Government Center
+	"70203":  "place-haecl", // Haymarket
+	"70204":  "place-haecl", // Haymarket
+	"70205":  "place-north", // North Station
+	"70206":  "place-north", // North Station
+	"70207":  "place-spmnl", // Science Park/West End
+	"70208":  "place-spmnl", // Science Park/West End
+	"70209":  "place-lech",  // Lechmere - Exit Only
+	"70210":  "place-lech",  // Lechmere
+	"70501":  "place-lech",  // Lechmere
+	"70502":  "place-lech",  // Lechmere
+	"70503":  "place-unsqu", // Union Square
+	"70504":  "place-unsqu", // Union Square
+	"70505":  "place-gilmn", // Gilman Square
+	"70506":  "place-gilmn", // Gilman Square
+	"70507":  "place-mgngl", // Magoun Square
+	"70508":  "place-mgngl", // Magoun Square
+	"70509":  "place-balsq", // Ball Square
+	"70510":  "place-balsq", // Ball Square
+	"70511":  "place-mdftf", // Medford/Tufts
+	"70512":  "place-mdftf", // Medford/Tufts
+	"70513":  "place-esomr", // East Somerville
+	"70514":  "place-esomr", // East Somerville
+	"70211":  "place-smary", // Saint Marys Street
+	"70212":  "place-smary", // Saint Marys Street
+	"70213":  "place-hwsst", // Hawes Street
+	"70214":  "place-hwsst", // Hawes Street
+	"70215":  "place-kntst", // Kent Street
+	"70216":  "place-kntst", // Kent Street
+	"70217":  "place-stpul", // Saint Paul Street (C)
+	"70218":  "place-stpul", // Saint Paul Street (C)
+	"70219":  "place-cool",  // Coolidge Corner
+	"70220":  "place-cool",  // Coolidge Corner
+	"70223":  "place-sumav", // Summit Avenue
+	"70224":  "place-sumav", // Summit Avenue
+	"70225":  "place-bndhl", // Brandon Hall
+	"70226":  "place-bndhl", // Brandon Hall
+	"70227":  "place-fbkst", // Fairbanks Street
+	"70228":  "place-fbkst", // Fairbanks Street
+	"70229":  "place-bcnwa", // Washington Square
+	"70230":  "place-bcnwa", // Washington Square
+	"70231":  "place-tapst", // Tappan Street
+	"70232":  "place-tapst", // Tappan Street
+	"70233":  "place-denrd", // Dean Road
+	"70234":  "place-denrd", // Dean Road
+	"70235":  "place-engav", // Englewood Avenue
+	"70236":  "place-engav", // Englewood Avenue
+	"70237":  "place-clmnl", // Cleveland Circle - Exit Only
+	"70238":  "place-clmnl", // Cleveland Circle
+	"70260":  "place-hsmnl", // Heath Street
+	"70261":  "place-hsmnl", // Heath Street
+	"70239":  "place-prmnl", // Prudential
+	"70240":  "place-prmnl", // Prudential
+	"70241":  "place-symcl", // Symphony
+	"70242":  "place-symcl", // Symphony
+	"70243":  "place-nuniv", // Northeastern University
+	"70244":  "place-nuniv", // Northeastern University
+	"70245":  "place-mfa",   // Museum of Fine Arts
+	"70246":  "place-mfa",   // Museum of Fine Arts
+	"70247":  "place-lngmd", // Longwood Medical Area
+	"70248":  "place-lngmd", // Longwood Medical Area
+	"70249":  "place-brmnl", // Brigham Circle
+	"70250":  "place-brmnl", // Brigham Circle
+	"70251":  "place-fenwd", // Fenwood Road
+	"70252":  "place-fenwd", // Fenwood Road
+	"70253":  "place-mispk", // Mission Park
+	"70254":  "place-mispk", // Mission Park
+	"70255":  "place-rvrwy", // Riverway
+	"70256":  "place-rvrwy", // Riverway
+	"70257":  "place-bckhl", // Back of the Hill
+	"70258":  "place-bckhl", // Back of the Hill
+	"71150":  "place-kencl", // Kenmore
+	"71151":  "place-kencl", // Kenmore
+	"71199":  "place-pktrm", // Park Street - Drop-off Only
 }
 
 // List of unique parent station IDs (place-* IDs) from staticStopToParentStation
@@ -423,9 +478,15 @@ var parentStationIDs = []string{
 	"place-wascm", // Washington Street
 	"place-woodl", // Woodland
 	"place-wrnst", // Warren Street
-	"place-lech",
-	"place-babck",
-	"place-amory",
+	"place-lech",  // Lechmere
+	"place-unsqu", // Union Square
+	"place-esomr", // East Somerville
+	"place-gilmn", // Gilman Square
+	"place-mgngl", // Magoun Square
+	"place-balsq", // Ball Square
+	"place-mdftf", // Medford/Tufts
+	"place-babck", // Babcock Street
+	"place-amory", // Amory Street
 }
 
 // NEED TO START FROM HERE =======================================
@@ -931,18 +992,18 @@ func actualArrivalMoment(routeName string) {
 				)
 
 				mapMutex.Lock()
-				arrivalKey := routeArrivalKey(routeName, vehicleID, actualData.TripID, actualData.RelatedStop)
+				placeID := staticStopToParentStation[actualData.RelatedStop]
+				if placeID == "" {
+					placeID = stopToParentStation[actualData.RelatedStop]
+				}
+				if placeID == "" {
+					placeID = actualData.RelatedStop
+				}
+				placeID = normalizeStationKey(placeID)
+				arrivalKey := routeArrivalKey(routeName, vehicleID, actualData.TripID, placeID)
 				alreadySent := vehicleStopArrivalSent[arrivalKey]
 
 				if !alreadySent {
-					placeID := staticStopToParentStation[actualData.RelatedStop]
-					if placeID == "" {
-						placeID = stopToParentStation[actualData.RelatedStop]
-					}
-					if placeID == "" {
-						placeID = actualData.RelatedStop
-					}
-					placeID = normalizeStationKey(placeID)
 
 					arrivalInfo = ArrivalInfo{
 						Route:          routeName,
@@ -1021,21 +1082,20 @@ func actualArrivalMoment(routeName string) {
 
 			if currentPollWithin {
 				// Train is within 20m of the next stop - consider it arrived
-				arrivalKey := routeArrivalKey(routeName, vehicleID, actualData.TripID, nextStopID)
+				placeID := staticStopToParentStation[nextStopID]
+				if placeID == "" {
+					// Check dynamic mapping if not in static
+					placeID = stopToParentStation[nextStopID]
+				}
+				if placeID == "" {
+					placeID = nextStopID // Fallback to stop ID if parent not found
+				}
+				placeID = normalizeStationKey(placeID)
+
+				arrivalKey := routeArrivalKey(routeName, vehicleID, actualData.TripID, placeID)
 				alreadySent := vehicleStopArrivalSent[arrivalKey]
 
 				if !alreadySent {
-					// Get parent station (place ID) for output
-					placeID := staticStopToParentStation[nextStopID]
-					if placeID == "" {
-						// Check dynamic mapping if not in static
-						placeID = stopToParentStation[nextStopID]
-					}
-					if placeID == "" {
-						placeID = nextStopID // Fallback to stop ID if parent not found
-					}
-					placeID = normalizeStationKey(placeID)
-
 					arrivalInfo = ArrivalInfo{
 						Route:          routeName,
 						StationPlaceID: placeID,
