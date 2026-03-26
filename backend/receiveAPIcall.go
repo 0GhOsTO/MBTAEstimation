@@ -492,12 +492,17 @@ type RecentPredictionDiff struct {
 	TrainID                   string
 }
 
-// selectMiddlePrediction chooses the middle prediction by observation time.
+// selectMiddlePrediction chooses the middle prediction by observation time, filtered to the given trip.
+// Filtering by tripID prevents predictions from previous trips of the same vehicle from skewing the result.
 // For even counts, it selects the older of the two middle entries.
-func selectMiddlePrediction(predictions []PredictionData, arrivalTime time.Time) (PredictionData, bool) {
+func selectMiddlePrediction(predictions []PredictionData, arrivalTime time.Time, tripID string) (PredictionData, bool) {
 	valid := make([]PredictionData, 0, len(predictions))
 	for _, pred := range predictions {
 		if pred.ArrivalTime == nil {
+			continue
+		}
+		// Skip predictions from a different trip to avoid cross-trip contamination.
+		if tripID != "" && pred.TripID != "" && pred.TripID != tripID {
 			continue
 		}
 		// Ignore snapshots observed after actual arrival when possible.
@@ -505,6 +510,19 @@ func selectMiddlePrediction(predictions []PredictionData, arrivalTime time.Time)
 			continue
 		}
 		valid = append(valid, pred)
+	}
+
+	// Fallback: if trip filter left nothing, retry without trip filter.
+	if len(valid) == 0 {
+		for _, pred := range predictions {
+			if pred.ArrivalTime == nil {
+				continue
+			}
+			if pred.ObservationTime.After(arrivalTime) {
+				continue
+			}
+			valid = append(valid, pred)
+		}
 	}
 
 	// Fallback: if all snapshots are after actual arrival, still use available predictions.
@@ -1045,13 +1063,17 @@ func main() {
 				gradedCount := 0
 				correctCount := 0
 				incorrectCount := 0
-				middlePrediction, hasMiddlePrediction := selectMiddlePrediction(predictions, arrival.ArrivalTime)
+				middlePrediction, hasMiddlePrediction := selectMiddlePrediction(predictions, arrival.ArrivalTime, arrival.TripID)
 				middleDiffMinutes := 0.0
 
 				// Grade every prediction observed at least 5 minutes before actual arrival.
 				for i := range predictions {
 					pred := &predictions[i]
 					if pred.ArrivalTime == nil {
+						continue
+					}
+					// Skip predictions from a different trip to avoid cross-trip contamination.
+					if arrival.TripID != "" && pred.TripID != "" && pred.TripID != arrival.TripID {
 						continue
 					}
 					if pred.ObservationTime.After(targetObservationTime) {
