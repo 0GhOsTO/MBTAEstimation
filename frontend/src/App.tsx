@@ -264,6 +264,7 @@ function App() {
   const [outboundAccuracy, setOutboundAccuracy] = useState(0)
   const [selectedStation, setSelectedStation] = useState(initialUIState.selectedStation)
   const [stationData, setStationData] = useState<{ [key: string]: StationStats }>({})
+  const [allLinesData, setAllLinesData] = useState<{ [line: string]: { [stationID: string]: StationStats } }>({})
   const [showEquation, setShowEquation] = useState(false)
   const [logs, setLogs] = useState<LogEntry[]>([
     {
@@ -312,6 +313,44 @@ function App() {
 
     return () => clearInterval(interval)
   }, [selectedLine, selectedStation])
+
+  // Fetch stats for all lines in background so shared-station badges can show their accuracy colors
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const fetchAllLines = async () => {
+      const results: { [line: string]: { [stationID: string]: StationStats } } = {}
+      await Promise.all(
+        supportedLines.map(async (line) => {
+          try {
+            const resp = await fetch(`${API_URL}/api/statistics?route=${encodeURIComponent(line)}`)
+            const data: StationStats[] = await resp.json()
+            const map: { [stationID: string]: StationStats } = {}
+            data.forEach(s => { map[s.station_id] = s })
+            results[line] = map
+          } catch {
+            // ignore per-line failures
+          }
+        })
+      )
+      setAllLinesData(results)
+    }
+    fetchAllLines()
+    const interval = setInterval(fetchAllLines, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const getBadgeClass = (line: string, direction: 'inbound' | 'outbound') => {
+    const stationID = stationNameToID[selectedStation]
+    const stats = allLinesData[line]?.[stationID]
+    if (!stats) return 'no-data'
+    const accuracy = direction === 'inbound'
+      ? (stats.inbound_total > 0 ? stats.inbound_accuracy : null)
+      : (stats.outbound_total > 0 ? stats.outbound_accuracy : null)
+    if (accuracy === null) return 'no-data'
+    if (accuracy >= 70) return 'good'
+    if (accuracy >= 50) return 'moderate'
+    return 'poor'
+  }
 
   const currentStations = stationsByLine[selectedLine]
   const lineMapView: { [key: string]: { center: [number, number]; zoom: number } } = {
@@ -411,6 +450,11 @@ function App() {
   const inboundRecentDiff = selectedStats?.inbound_recent_diff_minutes
   const outboundRecentDiff = selectedStats?.outbound_recent_diff_minutes
 
+  // Lines that also serve the currently selected station (excluding the active line)
+  const otherLinesAtStation = Object.entries(stationsByLine)
+    .filter(([line, stations]) => line !== selectedLine && stations.some(s => s.name === selectedStation))
+    .map(([line]) => line)
+
   return (
     <div className="app-container">
       <div className="left-panel">
@@ -448,6 +492,15 @@ function App() {
                     {inboundTotal > 0 ? `${inboundAccuracy}%` : 'N/A'}
                   </span>
                 </div>
+                {otherLinesAtStation.length > 0 && (
+                  <div className="shared-line-badges">
+                    {otherLinesAtStation.map(line => (
+                      <span key={line} className={`line-badge ${getBadgeClass(line, 'inbound')}`}>
+                        {line.replace('Green-', '')}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <p className="accuracy-label">Inbound</p>
                 <p className="direction-label">{lineDirectionLabels[selectedLine]?.inbound ?? 'to Government Center'}</p>
                 {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
@@ -458,6 +511,15 @@ function App() {
                     {outboundTotal > 0 ? `${outboundAccuracy}%` : 'N/A'}
                   </span>
                 </div>
+                {otherLinesAtStation.length > 0 && (
+                  <div className="shared-line-badges">
+                    {otherLinesAtStation.map(line => (
+                      <span key={line} className={`line-badge ${getBadgeClass(line, 'outbound')}`}>
+                        {line.replace('Green-', '')}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <p className="accuracy-label">Outbound</p>
                 <p className="direction-label">{lineDirectionLabels[selectedLine]?.outbound ?? 'to Outbound Terminal'}</p>
                 {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
