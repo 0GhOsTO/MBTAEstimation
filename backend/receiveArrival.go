@@ -660,8 +660,8 @@ func fetchStopGeolocation(stopID, routeName string, client *http.Client) ([2]flo
 }
 
 func actualArrivalMoment(routeName string) {
-	// Every 30 seconds ...
-	ticker := time.NewTicker(30 * time.Second)
+	// Every 15 seconds ...
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	// Create HTTP client once with timeout to prevent hanging
 	client := &http.Client{Timeout: 10 * time.Second}

@@ -470,7 +470,7 @@ function App() {
                 <option key={line} value={line}>{line.replace('-', ' ')}</option>
               ))}
             </select>
-            <span className="selector-separator">❯</span>
+            <span className="selector-separator">:</span>
             <select
               className="station-selector"
               value={selectedStation}
