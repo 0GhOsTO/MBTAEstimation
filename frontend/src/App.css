@@ -749,7 +749,7 @@
   }
 
   .selector-separator {
-    font-size: 1rem;
+    font-size: 2rem;
     font-weight: 700;
   }
 
@@ -851,14 +851,16 @@
   justify-content: center;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .selector-separator {
   color: white;
-  font-size: 1rem;
+  font-size: 2rem;
   font-weight: 700;
   opacity: 0.7;
+  line-height: 1;
+  transform: translateY(-0.08em);
 }
 
 .line-selector {
@@ -870,6 +872,7 @@
   padding: 0.75rem 1rem;
   font-size: 1rem;
   font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
@@ -904,7 +907,6 @@
 
 .station-selector {
   flex: 1;
-  min-width: 200px;
   max-width: 280px;
   background: rgba(0, 0, 0, 0.6);
   color: white;
@@ -913,6 +915,7 @@
   padding: 0.75rem 1rem;
   font-size: 1rem;
   font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;

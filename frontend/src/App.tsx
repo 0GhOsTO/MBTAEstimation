@@ -417,18 +417,19 @@ function App() {
         <div className="trustworthiness-display">
           <h1 className="project-title">MBTA Reliability</h1>
           <div className="selector-container">
-            <select 
-              className="line-selector" 
-              value={selectedLine} 
+            <select
+              className="line-selector"
+              value={selectedLine}
               onChange={(e) => handleLineChange(e.target.value)}
             >
               {supportedLines.map((line) => (
                 <option key={line} value={line}>{line.replace('-', ' ')}</option>
               ))}
             </select>
-            <select 
-              className="station-selector" 
-              value={selectedStation} 
+            <span className="selector-separator">❯</span>
+            <select
+              className="station-selector"
+              value={selectedStation}
               onChange={(e) => handleStationSelect(e.target.value)}
             >
               {currentStations.map((station) => (
