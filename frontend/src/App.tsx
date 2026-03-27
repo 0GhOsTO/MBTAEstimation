@@ -503,7 +503,7 @@ function App() {
                 )}
                 <p className="accuracy-label">Inbound</p>
                 <p className="direction-label">{lineDirectionLabels[selectedLine]?.inbound ?? 'to Government Center'}</p>
-                {inboundTotal > 0 ? <p className="prediction-count">({inboundTotal} predictions)</p> : null}
+                <p className="prediction-count">({inboundTotal} predictions)</p>
               </div>
               <div className="accuracy-item">
                 <div className={`percentage-circle ${outboundTotal > 0 ? (outboundAccuracy >= 70 ? 'good' : outboundAccuracy >= 50 ? 'moderate' : 'poor') : 'no-data'}`}>
@@ -522,7 +522,7 @@ function App() {
                 )}
                 <p className="accuracy-label">Outbound</p>
                 <p className="direction-label">{lineDirectionLabels[selectedLine]?.outbound ?? 'to Outbound Terminal'}</p>
-                {outboundTotal > 0 ? <p className="prediction-count">({outboundTotal} predictions)</p> : null}
+                <p className="prediction-count">({outboundTotal} predictions)</p>
               </div>
             </div>
           </div>
