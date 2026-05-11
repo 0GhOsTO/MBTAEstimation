@@ -13,7 +13,7 @@ Being students at Boston University, the MBTA's green line is a significant mode
 Here: [Reddit discussion about this issue & conversation about our website](https://www.reddit.com/r/BostonU/comments/1rlqm5g/i_got_tired_of_waiting_for_the_green_line_so_i/)
 
 #### Check-point
-<img width="826" height="157" alt="image" src="https://github.com/user-attachments/assets/952e280e-1486-4cbf-96b8-68c852d726c2" />
+<img width="886" height="180" alt="image" src="https://github.com/user-attachments/assets/14f2d258-6017-4e93-b088-afd9e57b10fc" />
 
 ## What is Trustworthiness Score?
 
